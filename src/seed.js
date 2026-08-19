@@ -51,6 +51,35 @@ const LAST = ['Kariuki', 'Wanjiru', 'Otieno', 'Achieng', 'Mutua', 'Nduta', 'Kipl
   'Barasa', 'Nasimiyu', 'Korir', 'Jepkosgei', 'Musyoka', 'Mwikali',
   'Ochieng', 'Adhiambo', 'Rotich', 'Chepkoech'];
 
+/** The accounts created by seed(). Kept separate so applySeedPassword() can
+ *  target exactly these and never touch a real user added later. */
+export const DEMO_USERNAMES = ['owner', 'ops', 'field1', 'field2', 'clerk', 'finance'];
+
+/**
+ * Force the demo accounts onto the current SEED_PASSWORD.
+ *
+ * seed() only runs against an empty database, so on a host where the database
+ * file survives a restart, changing SEED_PASSWORD would otherwise have no
+ * effect at all and the old password would silently keep working. This runs on
+ * every boot, is idempotent, and makes the environment variable authoritative.
+ * With SEED_PASSWORD unset it does nothing, so local development keeps the
+ * documented defaults.
+ */
+export function applySeedPassword({ log = console.log } = {}) {
+  if (!config.seedPassword) return 0;
+  const db = getDb();
+  const update = db.prepare(
+    'UPDATE app_user SET password_hash = ?, password_salt = ? WHERE username = ?',
+  );
+  let changed = 0;
+  for (const username of DEMO_USERNAMES) {
+    const { hash, salt } = hashPassword(config.seedPassword);
+    changed += update.run(hash, salt, username).changes;
+  }
+  if (changed) log(`  demo accounts set to SEED_PASSWORD (${changed} account(s))`);
+  return changed;
+}
+
 export function seed({ log = console.log } = {}) {
   const db = getDb();
   if (db.prepare('SELECT COUNT(*) AS n FROM farmer').get().n > 0) {
