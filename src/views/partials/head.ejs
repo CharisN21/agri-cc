@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= title %> · Sunflower outgrower</title>
+  <link rel="stylesheet" href="/app.css">
+  <script>
+    // Applied before first paint so the page never flashes the wrong theme.
+    (function () {
+      var t = localStorage.getItem('theme');
+      if (!t) t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+</head>
+<body>
+<header class="top">
+  <span class="brand">☀ SUNFLOWER OUTGROWER</span>
+  <% if (typeof user !== 'undefined' && user) { %>
+    <nav>
+      <a href="/dashboard">Dashboard</a>
+      <a href="/farmers">Farmers</a>
+      <a href="/contracts">Contracts</a>
+      <a href="/issues">Input issue</a>
+      <a href="/deliveries">Deliveries</a>
+      <a href="/settlements">Settlements</a>
+      <a href="/cloud">Cloud</a>
+    </nav>
+    <span class="spacer"></span>
+    <span class="who"><%= user.full_name %> · <%= user.role.replace('_', ' ') %></span>
+  <% } else { %>
+    <span class="spacer"></span>
+  <% } %>
+  <button class="ghost" id="theme-toggle" type="button" title="Toggle dark mode">◐</button>
+  <% if (typeof user !== 'undefined' && user) { %>
+    <form method="post" action="/logout" style="display:inline">
+      <button class="ghost" type="submit">Sign out</button>
+    </form>
+  <% } %>
+</header>
+<main>

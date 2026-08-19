@@ -1,0 +1,129 @@
+<%- include('partials/head') %>
+<%
+  var s = settlement;
+  var mismatch = s.mm_name.trim().toLowerCase() !== s.full_name.trim().toLowerCase();
+  var lines = [
+    { label: 'Gross value', kind: 'money', value: s.gross_value_cents },
+    { label: 'County cess', kind: 'money', value: 0 - s.cess_cents },
+    { label: 'Input credit recovery', kind: 'money', value: 0 - s.recovery_cents },
+    { label: 'Net payable', kind: 'money', value: s.net_payable_cents, total: true },
+  ];
+%>
+<h1><%= s.code %></h1>
+<p class="sub">
+  <a href="/farmers/<%= s.farmer_id %>"><%= s.full_name %></a> (<%= s.farmer_code %>) ·
+  delivery <a href="/deliveries/<%= s.delivery_id %>"><%= s.delivery_code %></a> ·
+  computed <%= s.computed_on %> at <%= (s.computed_at || '').slice(11, 16) %>
+</p>
+
+<% if (flash) { %><div class="flash err"><%= flash %></div><% } %>
+<% if (ok) { %><div class="flash ok"><%= ok %></div><% } %>
+<% if (mismatch) { %>
+  <div class="flash err">
+    Mobile money is registered as <strong><%= s.mm_name %></strong> but the ID name is
+    <strong><%= s.full_name %></strong>. Confirm the payee before approving.
+  </div>
+<% } %>
+
+<div class="tiles">
+  <div class="tile"><div class="label">Net payable</div><div class="value"><%= money(s.net_payable_cents) %></div></div>
+  <div class="tile"><div class="label">Amount paid</div><div class="value"><%= money(s.amount_paid_cents) %></div></div>
+  <div class="tile"><div class="label">Balance</div><div class="value"><%= money(s.balance_cents) %></div></div>
+  <div class="tile"><div class="label">Status</div><div class="value" style="font-size:1rem"><span class="pill <%= s.status %>"><%= s.status %></span></div></div>
+</div>
+
+<div class="panes" style="margin-top:1rem">
+  <div class="card">
+    <h3>How this figure was reached</h3>
+    <%- include('partials/working', { lines: lines }) %>
+    <p class="small" style="margin:0.8rem 0 0"><strong>Recovery cap that bound:</strong>
+      <span class="mono"><%= s.recovery_cap %></span></p>
+    <% if (s.notes) { %><p class="small muted" style="margin:0.2rem 0 0"><%= s.notes %></p><% } %>
+  </div>
+
+  <div class="card">
+    <h3>The load</h3>
+    <table>
+      <tr><td>Gross</td><td class="num"><%= kg(s.gross_g) %> kg</td></tr>
+      <tr><td>Tare</td><td class="num"><%= kg(s.tare_g) %> kg</td></tr>
+      <tr><td>Net</td><td class="num"><%= kg(s.net_g) %> kg</td></tr>
+      <tr><td>Payable after foreign matter</td><td class="num"><%= kg(s.payable_g) %> kg</td></tr>
+      <tr><td>Unit price</td><td class="num">KES <%= money(s.unit_price_cents) %> / kg</td></tr>
+      <% if (quality) { %>
+        <tr><td>Grade</td><td class="num"><span class="pill <%= quality.grade %>"><%= quality.grade %></span></td></tr>
+        <tr><td>Moisture / oil</td><td class="num"><%= fromBp(quality.moisture_bp) %>% / <%= fromBp(quality.oil_bp) %>%</td></tr>
+        <tr><td>Foreign / damage</td><td class="num"><%= fromBp(quality.foreign_bp) %>% / <%= fromBp(quality.damage_bp) %>%</td></tr>
+      <% } %>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>Price schedule used</h3>
+    <p class="small muted" style="margin-top:0">
+      This settlement recorded which version it used. Prices are immutable, so
+      this row reads the same today as it will in two years.
+    </p>
+    <table>
+      <tr><td>Version</td><td class="num">v<%= schedule.version %></td></tr>
+      <tr><td>Effective from</td><td class="num"><%= schedule.effective_from %></td></tr>
+      <tr><td>Base price</td><td class="num">KES <%= money(schedule.base_price_cents) %> / kg</td></tr>
+      <tr><td>Oil premium</td><td class="num">KES <%= money(schedule.oil_premium_cents) %> / point</td></tr>
+      <tr><td>Moisture discount</td><td class="num">KES <%= money(schedule.moisture_discount_cents) %> / point</td></tr>
+      <tr><td>Damage discount</td><td class="num">KES <%= money(schedule.damage_discount_cents) %> / point</td></tr>
+      <tr><td>County cess</td><td class="num"><%= fromBp(schedule.cess_bp) %>%</td></tr>
+      <tr><td>Cash floor</td><td class="num">KES <%= money(schedule.cash_floor_cents) %></td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>Payments</h3>
+    <% if (payments.length === 0) { %>
+      <p class="empty">No payment yet.</p>
+    <% } else { %>
+      <table>
+        <thead><tr><th>Code</th><th>Method</th><th>Reference</th><th class="num">Amount</th><th>Status</th><th>Date</th></tr></thead>
+        <tbody>
+        <% payments.forEach(function (p) { %>
+          <tr>
+            <td class="code"><%= p.code %></td>
+            <td><%= p.method %></td>
+            <td class="mono small"><%= p.provider_ref || '—' %></td>
+            <td class="num"><%= money(p.amount_cents) %></td>
+            <td><span class="pill <%= p.status %>"><%= p.status %></span></td>
+            <td class="small"><%= p.paid_on || '—' %></td>
+          </tr>
+        <% }); %>
+        </tbody>
+      </table>
+      <p class="small muted" style="margin:0.6rem 0 0">
+        Idempotency key <span class="mono"><%= payments[0].idempotency_key %></span> —
+        running the worker again cannot create a second payout.
+      </p>
+    <% } %>
+  </div>
+</div>
+
+<div class="card">
+  <% if (s.status === 'Pending' && canApprove) { %>
+    <form method="post" action="/settlements/<%= s.id %>/approve">
+      <div class="actions">
+        <button type="submit">Approve and queue KES <%= money(s.net_payable_cents) %></button>
+        <span class="small muted">
+          Writes the status change, the ledger recovery and the payment instruction
+          in one transaction.
+        </span>
+      </div>
+    </form>
+  <% } else if (s.status === 'Pending') { %>
+    <p style="margin:0" class="muted">
+      Awaiting approval. Your role may not approve settlements.
+    </p>
+  <% } else { %>
+    <p style="margin:0" class="muted">
+      <%= s.status %><% if (s.approved_at) { %> · approved <%= s.approved_at.slice(0, 16).replace('T', ' ') %><% } %>
+    </p>
+  <% } %>
+</div>
+
+<p class="small"><a href="/settlements">← All settlements</a></p>
+<%- include('partials/foot') %>

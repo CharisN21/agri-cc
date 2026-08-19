@@ -1,0 +1,99 @@
+<%- include('partials/head') %>
+<%
+  var mismatch = farmer.mm_name.trim().toLowerCase() !== farmer.full_name.trim().toLowerCase();
+%>
+<h1><%= farmer.full_name %> <span class="muted mono" style="font-size:1rem"><%= farmer.code %></span></h1>
+<p class="sub"><%= farmer.ward_name %> · <%= farmer.phone %> · registered <%= farmer.registered_on %></p>
+
+<% if (ok) { %><div class="flash ok"><%= ok %></div><% } %>
+<% if (mismatch) { %>
+  <div class="flash err">
+    Mobile money is registered as <strong><%= farmer.mm_name %></strong>, which does not match
+    the national ID name. Confirm before releasing any payout.
+  </div>
+<% } %>
+
+<div class="tiles">
+  <div class="tile"><div class="label">Owes on input credit</div>
+    <div class="value"><%= money(balanceCents) %></div>
+    <div class="target">summed from the ledger</div></div>
+  <div class="tile"><div class="label">National ID</div>
+    <div class="value" style="font-size:1rem"><%= farmer.national_id %></div></div>
+  <div class="tile"><div class="label">Parcels</div>
+    <div class="value"><%= parcels.length %></div>
+    <div class="target"><%= (parcels.reduce(function (s, p) { return s + p.acreage_bp; }, 0) / 10000).toFixed(2) %> acres total</div></div>
+</div>
+
+<% if (farmer.notes) { %><p class="sub" style="margin-top:1rem"><strong>Notes:</strong> <%= farmer.notes %></p><% } %>
+
+<h2>Contracts</h2>
+<div class="card scroll">
+  <table>
+    <thead><tr><th>Code</th><th>Parcel</th><th class="num">Expected</th><th class="num">Seed issued</th><th>Status</th><th>Signed</th></tr></thead>
+    <tbody>
+    <% if (contracts.length === 0) { %><tr><td colspan="6" class="empty">No contracts this season.</td></tr><% } %>
+    <% contracts.forEach(function (c) { %>
+      <tr>
+        <td class="code"><%= c.code %></td>
+        <td class="code"><%= c.parcel_code %></td>
+        <td class="num"><%= kg(c.expected_g) %></td>
+        <td class="num"><%= kg(c.issued_g) %></td>
+        <td><span class="pill <%= c.status %>"><%= c.status %></span></td>
+        <td class="small"><%= c.signed_on || '—' %></td>
+      </tr>
+    <% }); %>
+    </tbody>
+  </table>
+</div>
+
+<h2>Deliveries</h2>
+<div class="card scroll">
+  <table>
+    <thead><tr><th>Code</th><th>Date</th><th class="num">Net</th><th>Grade</th><th>Status</th><th>Notes</th></tr></thead>
+    <tbody>
+    <% if (deliveries.length === 0) { %><tr><td colspan="6" class="empty">Nothing delivered yet.</td></tr><% } %>
+    <% deliveries.forEach(function (d) { %>
+      <tr>
+        <td class="code"><a href="/deliveries/<%= d.id %>"><%= d.code %></a></td>
+        <td class="small"><%= d.delivered_on %> <span class="muted"><%= (d.delivered_at || '').slice(11, 16) %></span></td>
+        <td class="num"><%= kg(d.net_g) %></td>
+        <td><% if (d.grade) { %><span class="pill <%= d.grade %>"><%= d.grade %></span><% } else { %><span class="muted">—</span><% } %></td>
+        <td><span class="pill <%= d.status %>"><%= d.status %></span></td>
+        <td class="notes"><%= d.notes %></td>
+      </tr>
+    <% }); %>
+    </tbody>
+  </table>
+</div>
+
+<h2>Settlements</h2>
+<div class="card scroll">
+  <table>
+    <thead><tr><th>Code</th><th>Date</th><th class="num">Gross</th><th class="num">Recovery</th><th class="num">Net paid</th><th class="num">Balance</th><th>Status</th><th>Reference</th></tr></thead>
+    <tbody>
+    <% if (settlements.length === 0) { %><tr><td colspan="8" class="empty">Nothing settled yet.</td></tr><% } %>
+    <% settlements.forEach(function (s) { %>
+      <tr>
+        <td class="code"><a href="/settlements/<%= s.id %>"><%= s.code %></a></td>
+        <td class="small"><%= s.computed_on %></td>
+        <td class="num"><%= money(s.gross_value_cents) %></td>
+        <td class="num"><%= money(s.recovery_cents) %></td>
+        <td class="num"><%= money(s.amount_paid_cents) %></td>
+        <td class="num"><%= money(s.balance_cents) %></td>
+        <td><span class="pill <%= s.status %>"><%= s.status %></span></td>
+        <td class="mono small"><%= s.provider_ref || '—' %></td>
+      </tr>
+    <% }); %>
+    </tbody>
+  </table>
+</div>
+
+<h2>Add a parcel</h2>
+<div class="card">
+  <form method="post" action="/farmers/<%= farmer.id %>/parcels" class="grid">
+    <div><label for="acreage">Size (acres)</label><input id="acreage" name="acreage" class="num" required placeholder="1.75"></div>
+    <div><label for="pnotes">Notes</label><input id="pnotes" name="notes"></div>
+    <div class="actions"><button type="submit">Add parcel</button></div>
+  </form>
+</div>
+<%- include('partials/foot') %>

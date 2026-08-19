@@ -1,0 +1,28 @@
+{
+  "name": "agri-cc",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Sunflower contract-farming (outgrower) management system. SQLite system of record, optional Supabase cloud mirror.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "setup": "node src/cli.js migrate && node src/cli.js seed",
+    "migrate": "node src/cli.js migrate",
+    "seed": "node src/cli.js seed",
+    "reset": "node src/cli.js reset",
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "worker": "node src/payments/worker.js --loop",
+    "cloud:push": "node src/cloud/sync.js",
+    "test": "node --test test/*.test.js",
+    "prove:append-only": "node scripts/prove-append-only.mjs",
+    "prove:rules": "node scripts/prove-workflow-rules.mjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "ejs": "^3.1.10",
+    "express": "^4.22.2"
+  }
+}

@@ -1,0 +1,76 @@
+<%- include('partials/head') %>
+<h1>Deliveries</h1>
+<p class="sub">Net weight is gross minus tare, computed by the database. It cannot be typed in.</p>
+
+<% if (flash) { %><div class="flash err"><%= flash %></div><% } %>
+<% if (ok) { %><div class="flash ok"><%= ok %></div><% } %>
+
+<h2>Weigh in a load</h2>
+<div class="card">
+  <form method="post" action="/deliveries" class="grid">
+    <div style="grid-column:span 2"><label for="contract_id">Signed contract</label>
+      <select id="contract_id" name="contract_id" required>
+        <% contracts.forEach(function (c) { %>
+          <option value="<%= c.id %>"><%= c.code %> — <%= c.full_name %> (<%= c.ward_name %>)</option>
+        <% }); %>
+      </select></div>
+    <div><label for="gross_kg">Gross (kg)</label>
+      <input id="gross_kg" name="gross_kg" class="num" required placeholder="641.000"></div>
+    <div><label for="tare_kg">Tare (kg)</label>
+      <input id="tare_kg" name="tare_kg" class="num" required placeholder="20.500"></div>
+    <div><label for="vehicle_reg">Vehicle</label><input id="vehicle_reg" name="vehicle_reg" placeholder="KAA 123B"></div>
+    <div><label for="notes">Notes</label><input id="notes" name="notes" placeholder="Own transport"></div>
+    <div class="actions"><button type="submit">Weigh in</button></div>
+  </form>
+</div>
+
+<div class="filters">
+  <form method="get" action="/deliveries" class="filters" style="margin:0">
+    <div><label for="status">Status</label>
+      <select id="status" name="status" onchange="this.form.submit()">
+        <option value="">All</option>
+        <% ['Pending', 'Graded', 'Settled', 'Rejected'].forEach(function (s) { %>
+          <option value="<%= s %>" <%= status === s ? 'selected' : '' %>><%= s %></option>
+        <% }); %>
+      </select></div>
+  </form>
+  <a class="btn ghost" href="/export/deliveries.csv">Export CSV</a>
+</div>
+
+<div class="card scroll">
+  <table>
+    <thead><tr><th>Code</th><th>Date</th><th>Time</th><th>Farmer</th><th>Ward</th>
+      <th class="num">Gross</th><th class="num">Tare</th><th class="num">Net</th>
+      <th class="num">Moisture</th><th class="num">Oil</th><th>Grade</th><th>Status</th><th>Notes</th></tr></thead>
+    <tbody>
+    <% if (deliveries.length === 0) { %><tr><td colspan="13" class="empty">No deliveries.</td></tr><% } %>
+    <% deliveries.forEach(function (d) { %>
+      <tr>
+        <td class="code"><a href="/deliveries/<%= d.id %>"><%= d.code %></a></td>
+        <td class="small"><%= d.delivered_on %></td>
+        <td class="small mono"><%= (d.delivered_at || '').slice(11, 16) %></td>
+        <td><a href="/farmers/<%= d.farmer_id %>"><%= d.full_name %></a></td>
+        <td><%= d.ward_name %></td>
+        <td class="num"><%= kg(d.gross_g) %></td>
+        <td class="num"><%= kg(d.tare_g) %></td>
+        <td class="num"><%= kg(d.net_g) %></td>
+        <td class="num"><%= d.moisture_bp == null ? '—' : fromBp(d.moisture_bp) + '%' %></td>
+        <td class="num"><%= d.oil_bp == null ? '—' : fromBp(d.oil_bp) + '%' %></td>
+        <td><% if (d.grade) { %><span class="pill <%= d.grade %>"><%= d.grade %></span><% } else { %><span class="muted">ungraded</span><% } %></td>
+        <td><span class="pill <%= d.status %>"><%= d.status %></span></td>
+        <td class="notes"><%= d.notes %></td>
+      </tr>
+    <% }); %>
+    </tbody>
+    <% if (deliveries.length) { %>
+      <tfoot><tr class="total">
+        <td colspan="5">TOTAL</td>
+        <td class="num"><%= kg(deliveries.reduce(function (s, d) { return s + d.gross_g; }, 0)) %></td>
+        <td class="num"><%= kg(deliveries.reduce(function (s, d) { return s + d.tare_g; }, 0)) %></td>
+        <td class="num"><%= kg(deliveries.reduce(function (s, d) { return s + d.net_g; }, 0)) %></td>
+        <td colspan="5"></td>
+      </tr></tfoot>
+    <% } %>
+  </table>
+</div>
+<%- include('partials/foot') %>

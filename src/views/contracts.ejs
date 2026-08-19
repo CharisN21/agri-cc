@@ -1,0 +1,71 @@
+<%- include('partials/head') %>
+<h1>Contracts</h1>
+<p class="sub">Seed cannot be issued until a contract is signed. The database refuses it, not just this screen.</p>
+
+<% if (flash) { %><div class="flash err"><%= flash %></div><% } %>
+<% if (ok) { %><div class="flash ok"><%= ok %></div><% } %>
+
+<form class="filters" method="get" action="/contracts">
+  <div><label for="status">Status</label>
+    <select id="status" name="status" onchange="this.form.submit()">
+      <option value="">All</option>
+      <% ['Offered', 'Signed', 'Cancelled'].forEach(function (s) { %>
+        <option value="<%= s %>" <%= status === s ? 'selected' : '' %>><%= s %></option>
+      <% }); %>
+    </select></div>
+  <a class="btn ghost" href="/export/contracts.csv">Export CSV</a>
+</form>
+
+<div class="card scroll">
+  <table>
+    <thead><tr><th>Code</th><th>Farmer</th><th>Ward</th><th>Parcel</th><th class="num">Expected</th>
+      <th class="num">Entitlement</th><th class="num">Issued</th><th>Status</th><th>Signed</th><th></th></tr></thead>
+    <tbody>
+    <% if (contracts.length === 0) { %><tr><td colspan="10" class="empty">No contracts.</td></tr><% } %>
+    <% contracts.forEach(function (c) { %>
+      <tr>
+        <td class="code"><%= c.code %></td>
+        <td><a href="/farmers/<%= c.farmer_id %>"><%= c.full_name %></a></td>
+        <td><%= c.ward_name %></td>
+        <td class="code"><%= c.parcel_code %></td>
+        <td class="num"><%= kg(c.expected_g) %></td>
+        <td class="num"><%= kg(c.seed_entitlement_g) %></td>
+        <td class="num"><%= kg(c.issued_g) %></td>
+        <td><span class="pill <%= c.status %>"><%= c.status %></span></td>
+        <td class="small"><%= c.signed_on || '—' %></td>
+        <td>
+          <% if (c.status === 'Offered') { %>
+            <form method="post" action="/contracts/<%= c.id %>/sign" style="display:inline">
+              <button type="submit">Sign</button>
+            </form>
+          <% } %>
+        </td>
+      </tr>
+    <% }); %>
+    </tbody>
+  </table>
+</div>
+
+<h2>Offer a contract</h2>
+<div class="card">
+  <form method="post" action="/contracts" class="grid">
+    <div><label for="farmer_id">Farmer</label>
+      <select id="farmer_id" name="farmer_id" required>
+        <% farmers.forEach(function (f) { %>
+          <option value="<%= f.id %>"><%= f.code %> — <%= f.full_name %> (<%= f.ward_name %>)</option>
+        <% }); %>
+      </select></div>
+    <div><label for="expected_kg">Expected harvest (kg)</label>
+      <input id="expected_kg" name="expected_kg" class="num" required placeholder="1400"></div>
+    <div><label for="seed_kg">Seed entitlement (kg)</label>
+      <input id="seed_kg" name="seed_kg" class="num" required placeholder="8"></div>
+    <div><label for="recovery_share_bp">Recovery share (basis points)</label>
+      <input id="recovery_share_bp" name="recovery_share_bp" class="num" value="5000"></div>
+    <div style="grid-column:1/-1"><label for="notes">Notes</label><input id="notes" name="notes"></div>
+    <div class="actions"><button type="submit">Offer contract</button></div>
+  </form>
+  <p class="small muted" style="margin-bottom:0">
+    Offering does not release seed. The contract must be signed first.
+  </p>
+</div>
+<%- include('partials/foot') %>

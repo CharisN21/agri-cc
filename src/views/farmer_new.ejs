@@ -1,0 +1,31 @@
+<%- include('partials/head') %>
+<h1>Register a farmer</h1>
+<p class="sub">The mobile money name is captured separately because it often differs from the ID name — and that is what makes a payout bounce.</p>
+
+<% if (flash) { %><div class="flash err"><%= flash %></div><% } %>
+
+<div class="card">
+  <form method="post" action="/farmers" class="grid">
+    <div><label for="full_name">Full name (as on ID)</label>
+      <input id="full_name" name="full_name" required autofocus></div>
+    <div><label for="national_id">National ID</label>
+      <input id="national_id" name="national_id" required></div>
+    <div><label for="phone">Phone</label>
+      <input id="phone" name="phone" placeholder="2547…" required></div>
+    <div><label for="mm_name">Mobile money name</label>
+      <input id="mm_name" name="mm_name" placeholder="leave blank if same as ID name"></div>
+    <div><label for="ward_id">Ward</label>
+      <select id="ward_id" name="ward_id" required>
+        <% wards.forEach(function (w) { %><option value="<%= w.id %>"><%= w.name %></option><% }); %>
+      </select></div>
+    <div><label for="acreage">Parcel size (acres)</label>
+      <input id="acreage" name="acreage" class="num" placeholder="2.50"></div>
+    <div style="grid-column:1/-1"><label for="notes">Notes</label>
+      <input id="notes" name="notes" placeholder="anything the field officer should remember"></div>
+    <div class="actions">
+      <button type="submit">Register</button>
+      <a class="btn ghost" href="/farmers">Cancel</a>
+    </div>
+  </form>
+</div>
+<%- include('partials/foot') %>

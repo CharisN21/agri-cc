@@ -1,0 +1,121 @@
+<%- include('partials/head') %>
+<h1><%= delivery.code %></h1>
+<p class="sub">
+  <a href="/farmers/<%= delivery.farmer_id %>"><%= delivery.full_name %></a>
+  (<%= delivery.farmer_code %>) · <%= delivery.ward_name %> ·
+  <%= delivery.delivered_on %> at <%= (delivery.delivered_at || '').slice(11, 16) %> ·
+  contract <%= delivery.contract_code %>
+  <% if (delivery.vehicle_reg) { %> · <%= delivery.vehicle_reg %><% } %>
+</p>
+
+<% if (flash) { %><div class="flash err"><%= flash %></div><% } %>
+<% if (ok) { %><div class="flash ok"><%= ok %></div><% } %>
+
+<div class="tiles">
+  <div class="tile"><div class="label">Gross</div><div class="value"><%= kg(delivery.gross_g) %></div><div class="target">kg on the weighbridge</div></div>
+  <div class="tile"><div class="label">Tare</div><div class="value"><%= kg(delivery.tare_g) %></div><div class="target">kg of bags and vehicle</div></div>
+  <div class="tile"><div class="label">Net</div><div class="value"><%= kg(delivery.net_g) %></div><div class="target">gross − tare, computed</div></div>
+  <div class="tile"><div class="label">Status</div><div class="value" style="font-size:1rem"><span class="pill <%= delivery.status %>"><%= delivery.status %></span></div></div>
+</div>
+
+<% if (delivery.notes) { %><p class="sub" style="margin-top:1rem"><strong>Notes:</strong> <%= delivery.notes %></p><% } %>
+
+<% if (!quality) { %>
+  <h2>Record the quality test</h2>
+  <div class="card">
+    <p class="small muted">
+      Enter the four readings. The grade is derived from them — it is not a choice.
+    </p>
+    <form method="post" action="/deliveries/<%= delivery.id %>/grade" class="grid">
+      <div><label for="moisture">Moisture %</label><input id="moisture" name="moisture" class="num" required placeholder="9.50"></div>
+      <div><label for="oil">Oil %</label><input id="oil" name="oil" class="num" required placeholder="42.00"></div>
+      <div><label for="foreign">Foreign matter %</label><input id="foreign" name="foreign" class="num" required placeholder="2.50"></div>
+      <div><label for="damage">Damage %</label><input id="damage" name="damage" class="num" required placeholder="4.00"></div>
+      <div style="grid-column:1/-1"><label for="notes">Notes</label><input id="notes" name="notes"></div>
+      <div class="actions"><button type="submit">Record test</button></div>
+    </form>
+    <p class="small muted" style="margin-bottom:0">
+      REJECT if moisture is over 14.00% or foreign matter over 10.00%.
+      A if oil is at least 41.00% and moisture at most 10.00%. B if oil is at least 38.00%. Otherwise C.
+    </p>
+  </div>
+<% } else { %>
+  <h2>Quality test <span class="muted mono" style="font-size:0.8rem"><%= quality.code %></span></h2>
+  <div class="card">
+    <div class="tiles">
+      <div class="tile"><div class="label">Moisture</div><div class="value"><%= fromBp(quality.moisture_bp) %>%</div></div>
+      <div class="tile"><div class="label">Oil</div><div class="value"><%= fromBp(quality.oil_bp) %>%</div></div>
+      <div class="tile"><div class="label">Foreign matter</div><div class="value"><%= fromBp(quality.foreign_bp) %>%</div></div>
+      <div class="tile"><div class="label">Damage</div><div class="value"><%= fromBp(quality.damage_bp) %>%</div></div>
+      <div class="tile"><div class="label">Grade</div><div class="value"><span class="pill <%= quality.grade %>"><%= quality.grade %></span></div></div>
+    </div>
+    <p class="small" style="margin:0.8rem 0 0"><strong>Why:</strong> <%= reason %></p>
+    <p class="small muted" style="margin:0.2rem 0 0">
+      Tested <%= quality.tested_on %> at <%= (quality.tested_at || '').slice(11, 16) %>
+    </p>
+  </div>
+<% } %>
+
+<% if (preview && preview.rejected) { %>
+  <div class="flash err">
+    This load was rejected, so it is not bought and cannot be settled.
+    It never entered grain stock.
+  </div>
+<% } else if (preview) { %>
+  <h2>The full working</h2>
+  <p class="sub">
+    Every adjustment, in order. A farmer with a calculator can reproduce the
+    figure at the bottom from the readings above.
+  </p>
+
+  <div class="panes">
+    <div class="card">
+      <h3>1 · Weight we pay for</h3>
+      <%- include('partials/working', { lines: preview.priced.weightLines }) %>
+    </div>
+    <div class="card">
+      <h3>2 · Price per kilogram</h3>
+      <%- include('partials/working', { lines: preview.priced.priceLines }) %>
+      <p class="small muted" style="margin:0.7rem 0 0">
+        Price schedule v<%= preview.schedule.version %>, effective <%= preview.schedule.effective_from %>.
+        Base KES <%= money(preview.schedule.base_price_cents) %>/kg.
+      </p>
+    </div>
+    <div class="card">
+      <h3>3 · Value of the load</h3>
+      <%- include('partials/working', { lines: preview.priced.valueLines }) %>
+    </div>
+    <div class="card">
+      <h3>4 · What the farmer is paid</h3>
+      <%- include('partials/working', { lines: preview.settled.lines }) %>
+      <p class="small" style="margin:0.7rem 0 0">
+        <strong>Recovery cap:</strong> <%= preview.settled.capExplanation %>
+      </p>
+      <p class="small muted" style="margin:0.2rem 0 0">
+        Owed before this load: KES <%= money(Math.max(0, preview.owed)) %>.
+        Caps considered — share KES <%= money(preview.settled.caps.shareCap) %>,
+        owed KES <%= money(preview.settled.caps.owedCap) %>,
+        cash floor KES <%= money(preview.settled.caps.floorCap) %>. The smallest wins.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <% if (existingSettlement) { %>
+      <p style="margin:0">
+        Settled as <a href="/settlements/<%= existingSettlement.id %>"><%= existingSettlement.code %></a>
+        · <span class="pill <%= existingSettlement.status %>"><%= existingSettlement.status %></span>
+      </p>
+    <% } else { %>
+      <form method="post" action="/deliveries/<%= delivery.id %>/settle">
+        <div class="actions">
+          <button type="submit">Create settlement for KES <%= money(preview.settled.netPayableCents) %></button>
+          <span class="small muted">This records which price schedule version was used.</span>
+        </div>
+      </form>
+    <% } %>
+  </div>
+<% } %>
+
+<p class="small"><a href="/deliveries">← All deliveries</a></p>
+<%- include('partials/foot') %>

@@ -1,0 +1,15 @@
+{
+  "//": "VS Code will offer to install these when the folder is opened.",
+  "recommendations": [
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "digitalbrainstem.javascript-ejs-support",
+    "qwtel.sqlite-viewer",
+    "mtxr.sqltools",
+    "mtxr.sqltools-driver-sqlite",
+    "usernamehw.errorlens",
+    "christian-kohler.path-intellisense",
+    "eamodio.gitlens",
+    "humao.rest-client"
+  ]
+}

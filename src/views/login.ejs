@@ -1,0 +1,34 @@
+<%- include('partials/head') %>
+<div class="login-wrap">
+  <h1>Sign in</h1>
+  <p class="sub">Sunflower contract-farming management</p>
+  <div class="card">
+    <% if (error) { %><div class="flash err"><%= error %></div><% } %>
+    <form method="post" action="/login">
+      <input type="hidden" name="next" value="<%= next %>">
+      <div style="margin-bottom:0.7rem">
+        <label for="username">Username</label>
+        <input id="username" name="username" autocomplete="username" autofocus required>
+      </div>
+      <div style="margin-bottom:1rem">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+      </div>
+      <button type="submit" style="width:100%">Sign in</button>
+    </form>
+    <% if (showDemoHints) { %>
+      <div class="hints">
+        Seeded accounts — password is the username followed by <code>123</code>:<br>
+        <code>owner</code> · <code>ops</code> · <code>field1</code> · <code>clerk</code> · <code>finance</code><br>
+        Sign in as <code>clerk</code> to see settlement approval refused.
+      </div>
+    <% } else { %>
+      <div class="hints">
+        Accounts: <code>owner</code> · <code>ops</code> · <code>field1</code> ·
+        <code>clerk</code> · <code>finance</code>.<br>
+        Ask whoever deployed this for the password.
+      </div>
+    <% } %>
+  </div>
+</div>
+<%- include('partials/foot') %>

@@ -1,0 +1,60 @@
+<%- include('partials/head') %>
+<h1>Farmers</h1>
+<p class="sub"><%= farmers.length %> shown · balances are summed from the ledger, never stored</p>
+
+<% if (flash) { %><div class="flash err"><%= flash %></div><% } %>
+<% if (ok) { %><div class="flash ok"><%= ok %></div><% } %>
+
+<form class="filters" method="get" action="/farmers">
+  <div><label for="q">Search</label>
+    <input id="q" name="q" value="<%= q %>" placeholder="name, code, phone or ID"></div>
+  <div><label for="ward">Ward</label>
+    <select id="ward" name="ward">
+      <option value="">All wards</option>
+      <% wards.forEach(function (w) { %>
+        <option value="<%= w.id %>" <%= wardId === w.id ? 'selected' : '' %>><%= w.name %></option>
+      <% }); %>
+    </select></div>
+  <button type="submit">Search</button>
+  <a class="btn ghost" href="/farmers/new">Register a farmer</a>
+  <a class="btn ghost" href="/export/farmers.csv">Export CSV</a>
+</form>
+
+<div class="card scroll">
+  <table>
+    <thead>
+      <tr>
+        <th>Code</th><th>Name</th><th>Ward</th><th>Phone</th><th>Mobile money</th>
+        <th class="num">Contracted</th><th class="num">Delivered</th><th class="num">Owes</th>
+        <th>Status</th><th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    <% if (farmers.length === 0) { %>
+      <tr><td colspan="10" class="empty">No farmers match that search.</td></tr>
+    <% } %>
+    <% farmers.forEach(function (f) {
+         var mismatch = f.mm_name.trim().toLowerCase() !== f.full_name.trim().toLowerCase(); %>
+      <tr>
+        <td class="code"><a href="/farmers/<%= f.id %>"><%= f.code %></a></td>
+        <td><%= f.full_name %></td>
+        <td><%= f.ward_name %></td>
+        <td class="mono small"><%= f.phone %></td>
+        <td>
+          <% if (mismatch) { %>
+            <span class="pill bad" title="Mobile money name does not match the national ID name">≠ <%= f.mm_name %></span>
+          <% } else { %>
+            <span class="muted small">matches ID</span>
+          <% } %>
+        </td>
+        <td class="num"><%= kg(f.expected_g) %></td>
+        <td class="num"><%= kg(f.delivered_g) %></td>
+        <td class="num"><%= money(f.balance_cents) %></td>
+        <td><span class="pill <%= f.status %>"><%= f.status %></span></td>
+        <td class="notes"><%= f.notes %></td>
+      </tr>
+    <% }); %>
+    </tbody>
+  </table>
+</div>
+<%- include('partials/foot') %>

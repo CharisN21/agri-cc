@@ -1,0 +1,60 @@
+<%- include('partials/head') %>
+<h1>Cloud mirror</h1>
+<p class="sub">
+  Local SQLite is the system of record. This pushes a read-only copy to Supabase
+  so head office can see the season without reaching into the store's laptop.
+</p>
+
+<% if (flash) { %><div class="flash err"><%= flash %></div><% } %>
+<% if (ok) { %><div class="flash ok"><%= ok %></div><% } %>
+
+<% if (!enabled) { %>
+  <div class="card">
+    <h3>Not configured</h3>
+    <p>The app runs completely without this. To switch it on:</p>
+    <ol class="small" style="line-height:1.9">
+      <li>Create a project at <span class="mono">supabase.com</span>.</li>
+      <li>Open the SQL editor and run <span class="mono">migrations/supabase.sql</span> from this repo.</li>
+      <li>Copy <span class="mono">.env.example</span> to <span class="mono">.env</span> and fill in
+          <span class="mono">SUPABASE_URL</span> and <span class="mono">SUPABASE_SERVICE_ROLE_KEY</span>
+          from Project Settings → API.</li>
+      <li>Restart, then press Push here or run <span class="mono">npm run cloud:push</span>.</li>
+    </ol>
+    <p class="small muted">
+      The service role key bypasses row level security and must never reach a
+      browser. It is read from <span class="mono">.env</span>, which is gitignored.
+    </p>
+  </div>
+<% } else { %>
+  <div class="card">
+    <div class="actions">
+      <form method="post" action="/cloud/push"><button type="submit">Push now</button></form>
+      <span class="small muted">Target: <span class="mono"><%= url %></span></span>
+    </div>
+  </div>
+<% } %>
+
+<h2>What would be pushed</h2>
+<div class="card scroll">
+  <table>
+    <thead><tr><th>Table</th><th class="num">Local rows</th><th class="num">Pushed to id</th>
+      <th class="num">Pending</th><th>Last run</th><th>Last error</th></tr></thead>
+    <tbody>
+    <% state.forEach(function (t) { %>
+      <tr>
+        <td class="mono small"><%= t.table %></td>
+        <td class="num"><%= t.rows %></td>
+        <td class="num"><%= t.pushedTo %></td>
+        <td class="num"><%= t.pending %></td>
+        <td class="small muted"><%= t.lastRunAt || '—' %></td>
+        <td class="small" style="color:var(--bad)"><%= t.lastError || '' %></td>
+      </tr>
+    <% }); %>
+    </tbody>
+  </table>
+</div>
+<p class="small muted">
+  The push is watermark-based over append-only tables, so it can be interrupted
+  and resumed without duplicating anything.
+</p>
+<%- include('partials/foot') %>

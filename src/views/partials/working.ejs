@@ -1,0 +1,16 @@
+<%# Renders a list of adjustment lines. `lines` is an array of
+    { label, kind: 'money'|'weight', value, total?, note? } %>
+<div class="working">
+  <% lines.forEach(function (l) { %>
+    <div class="row <%= l.total ? 'total' : '' %> <%= l.note ? 'note' : '' %>">
+      <span class="lbl"><%= l.label %></span>
+      <span class="val <%= l.value < 0 ? 'neg' : '' %>">
+        <% if (l.kind === 'weight') { %>
+          <%= l.value < 0 ? '−' : '' %><%= kg(Math.abs(l.value)) %> kg
+        <% } else { %>
+          <%= l.value < 0 ? '−' : '' %>KES <%= money(Math.abs(l.value)) %>
+        <% } %>
+      </span>
+    </div>
+  <% }); %>
+</div>

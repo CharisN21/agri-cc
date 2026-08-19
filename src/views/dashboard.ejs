@@ -1,0 +1,177 @@
+<%- include('partials/head') %>
+<%
+  function barClass(bp) { return bp >= 8000 ? 'high' : bp >= 5000 ? 'mid' : 'low'; }
+  function w(bp) { return Math.min(100, bp / 100).toFixed(1) + '%'; }
+%>
+<h1><%= d.season.name %></h1>
+<p class="sub">
+  As at <%= d.asOf %> · price schedule v<%= d.schedule.version %>
+  (base KES <%= money(d.schedule.base_price_cents) %>/kg, effective <%= d.schedule.effective_from %>)
+</p>
+
+<div class="panes">
+
+  <!-- 1 -->
+  <section class="card">
+    <h3>Will we hit tonnage?</h3>
+    <div class="tiles">
+      <div class="tile">
+        <div class="label">Delivered</div>
+        <div class="value"><%= tonnes(d.tonnage.deliveredG) %> t</div>
+        <div class="target">Target <%= tonnes(d.tonnage.targetG) %> t · <%= fromBp(d.tonnage.achievedBp) %>%</div>
+        <div class="bar <%= barClass(d.tonnage.achievedBp) %>"><span style="width:<%= w(d.tonnage.achievedBp) %>"></span></div>
+      </div>
+      <div class="tile">
+        <div class="label">Still needed</div>
+        <div class="value"><%= tonnes(d.tonnage.shortfallG) %> t</div>
+        <div class="target">to reach the season target</div>
+      </div>
+    </div>
+    <div class="scroll" style="margin-top:0.9rem">
+      <table>
+        <thead><tr><th>Catchment</th><th class="num">Delivered</th><th class="num">Contracted</th><th class="num">Achieved</th><th class="num">Farmers</th></tr></thead>
+        <tbody>
+        <% d.tonnage.byWard.forEach(function (ward) { %>
+          <tr>
+            <td><%= ward.ward_name %></td>
+            <td class="num"><%= tonnes(ward.delivered_g) %> t</td>
+            <td class="num"><%= tonnes(ward.expected_g) %> t</td>
+            <td class="num"><%= fromBp(ward.achievedBp) %>%
+              <div class="bar <%= barClass(ward.achievedBp) %>"><span style="width:<%= w(ward.achievedBp) %>"></span></div>
+            </td>
+            <td class="num"><%= ward.delivering_farmers %></td>
+          </tr>
+        <% }); %>
+        </tbody>
+      </table>
+    </div>
+    <p class="small"><a href="<%= d.tonnage.drill %>">Every delivery →</a></p>
+  </section>
+
+  <!-- 2 -->
+  <section class="card">
+    <h3>Are we making money?</h3>
+    <div class="tiles">
+      <div class="tile">
+        <div class="label">Landed cost / tonne</div>
+        <div class="value"><%= money(d.money.landedPerTonneCents) %></div>
+        <div class="target">Budget <%= money(d.money.budgetPerTonneCents) %></div>
+      </div>
+      <div class="tile">
+        <div class="label">Against budget / tonne</div>
+        <div class="value" style="color:var(--<%= d.money.marginPerTonneCents >= 0 ? 'good' : 'bad' %>)">
+          <%= d.money.marginPerTonneCents >= 0 ? '+' : '' %><%= money(d.money.marginPerTonneCents) %>
+        </div>
+        <div class="target">on <%= tonnes(d.money.payableG) %> t bought</div>
+      </div>
+    </div>
+    <p class="small muted" style="margin:0.6rem 0 0">
+      Budget is the season base price. We buy grain and do not record selling it,
+      so this is a buying margin, not a gross profit.
+    </p>
+    <div class="scroll" style="margin-top:0.6rem">
+      <table>
+        <thead><tr><th>Catchment</th><th class="num">Bought</th><th class="num">Landed / t</th><th class="num">vs budget</th></tr></thead>
+        <tbody>
+        <% d.money.byWard.forEach(function (ward) { %>
+          <tr>
+            <td><%= ward.ward_name %></td>
+            <td class="num"><%= tonnes(ward.payable_g) %> t</td>
+            <td class="num"><%= money(ward.landed_per_tonne_cents) %></td>
+            <td class="num" style="color:var(--<%= ward.margin_per_tonne_cents >= 0 ? 'good' : 'bad' %>)">
+              <%= ward.margin_per_tonne_cents >= 0 ? '+' : '' %><%= money(ward.margin_per_tonne_cents) %>
+            </td>
+          </tr>
+        <% }); %>
+        </tbody>
+      </table>
+    </div>
+    <h3 style="margin-top:1rem">Grade mix</h3>
+    <div class="tiles">
+      <% d.money.gradeMix.forEach(function (g) { %>
+        <div class="tile">
+          <div class="label">Grade <%= g.grade %></div>
+          <div class="value"><%= fromBp(g.shareBp) %>%</div>
+          <div class="target"><%= g.loads %> load(s) · <%= tonnes(g.net_g) %> t</div>
+        </div>
+      <% }); %>
+    </div>
+    <p class="small"><a href="<%= d.money.drill %>">Every settlement →</a></p>
+  </section>
+
+  <!-- 3 -->
+  <section class="card">
+    <h3>Is our money coming back?</h3>
+    <div class="tiles">
+      <div class="tile">
+        <div class="label">Input credit issued</div>
+        <div class="value"><%= money(d.credit.issuedCents) %></div>
+      </div>
+      <div class="tile">
+        <div class="label">Recovered</div>
+        <div class="value"><%= fromBp(d.credit.recoveredBp) %>%</div>
+        <div class="target">Target 100% by season close</div>
+        <div class="bar <%= barClass(d.credit.recoveredBp) %>"><span style="width:<%= w(d.credit.recoveredBp) %>"></span></div>
+      </div>
+      <div class="tile">
+        <div class="label">Still outstanding</div>
+        <div class="value"><%= money(d.credit.outstandingCents) %></div>
+      </div>
+    </div>
+    <h3 style="margin-top:1rem">Side-selling watchlist</h3>
+    <p class="small muted" style="margin:0 0 0.4rem">
+      Signed farmers ranked by delivered ÷ contracted. The bottom of this list is
+      where seed went out and grain did not come back.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Farmer</th><th>Ward</th><th class="num">Delivered</th><th class="num">Contracted</th><th class="num">Ratio</th><th class="num">Owes</th></tr></thead>
+        <tbody>
+        <% d.credit.watchlist.forEach(function (f) { %>
+          <tr>
+            <td><a href="/farmers/<%= f.id %>"><%= f.full_name %></a> <span class="muted small"><%= f.code %></span></td>
+            <td><%= f.ward_name %></td>
+            <td class="num"><%= kg(f.delivered_g) %></td>
+            <td class="num"><%= kg(f.expected_g) %></td>
+            <td class="num"><%= fromBp(f.deliveredBp) %>%
+              <div class="bar <%= barClass(f.deliveredBp) %>"><span style="width:<%= w(f.deliveredBp) %>"></span></div>
+            </td>
+            <td class="num"><%= money(f.balance_cents) %></td>
+          </tr>
+        <% }); %>
+        </tbody>
+      </table>
+    </div>
+    <p class="small"><a href="<%= d.credit.drill %>">Every farmer →</a></p>
+  </section>
+
+  <!-- 4 -->
+  <section class="card">
+    <h3>Is anything about to break?</h3>
+    <% if (d.risk.count === 0) { %>
+      <p class="empty">Nothing is flagged. Every rule below is clear.</p>
+    <% } else { %>
+      <% d.risk.alerts.forEach(function (a) { %>
+        <div class="alert <%= a.severity %>">
+          <span class="dot"></span>
+          <div>
+            <div class="t"><%= a.title %></div>
+            <div class="d"><%= a.detail %></div>
+            <div class="small"><a href="<%= a.drill %>">Go and look →</a></div>
+          </div>
+        </div>
+      <% }); %>
+    <% } %>
+    <h3 style="margin-top:1.2rem">Rules being watched</h3>
+    <ul class="small muted" style="margin:0; padding-left:1.1rem; line-height:1.8">
+      <li>Settlements sitting unapproved</li>
+      <li>Approved settlements not yet paid out</li>
+      <li>Accepted loads above 12.00% moisture</li>
+      <li>Seed lots past their germination retest date</li>
+      <li>Mobile money name not matching the national ID name</li>
+      <li>Payment instructions that failed and are retrying</li>
+    </ul>
+  </section>
+
+</div>
+<%- include('partials/foot') %>

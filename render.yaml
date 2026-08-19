@@ -1,0 +1,46 @@
+# Render blueprint — free tier, demo deployment (Path A).
+#
+# READ THIS BEFORE YOU RELY ON IT:
+#
+# Render's free tier has no persistent disk. The SQLite file lives on the
+# container filesystem, which is wiped on every deploy and every restart —
+# including the restart after the 15-minute idle spin-down. So this deployment
+# RESEEDS ITSELF from scratch each time it wakes up.
+#
+# That is fine for showing the app to someone. It is not a place to enter real
+# farmer data. For that, either attach a paid persistent disk, or move the
+# primary database to Supabase Postgres (migrations/supabase.sql already has
+# the schema and the same triggers).
+#
+# The free tier also has no background workers, so the payment outbox is drained
+# in-process on a timer instead of by a separate service.
+
+services:
+  - type: web
+    name: agri-cc
+    runtime: node
+    plan: free
+    region: frankfurt          # closest free region to Kenya
+    buildCommand: npm ci
+    # setup is idempotent: migrate applies once, seed skips if data exists.
+    # On free tier the disk is empty at boot, so this reseeds every cold start.
+    startCommand: npm run setup && npm start
+    healthCheckPath: /api/widget
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: DB_PATH
+        value: ./data/agri.db
+      - key: SESSION_SECRET
+        generateValue: true    # Render generates a strong secret; never commit one
+      - key: WORKER_IN_PROCESS
+        value: "true"          # no free background workers, so drain in-process
+      # Set this in the Render dashboard to change the seeded demo passwords.
+      # Leave unset and they are the documented username + "123".
+      - key: SEED_PASSWORD
+        sync: false
+      # Optional Supabase mirror. Set in the dashboard, never in this file.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false

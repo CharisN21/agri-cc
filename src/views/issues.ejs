@@ -1,0 +1,98 @@
+<%- include('partials/head') %>
+<h1>Input issue</h1>
+<p class="sub">Seed goes out on credit against a signed contract. Every issue debits the farmer's ledger in the same transaction as the stock movement.</p>
+
+<% if (flash) { %><div class="flash err"><%= flash %></div><% } %>
+<% if (ok) { %><div class="flash ok"><%= ok %></div><% } %>
+
+<h2>Seed lots</h2>
+<div class="card scroll">
+  <table>
+    <thead><tr><th>Lot</th><th>KEPHIS tag</th><th class="num">Germination</th><th>Retest due</th>
+      <th class="num">On hand</th><th class="num">Cost / kg</th><th>Status</th></tr></thead>
+    <tbody>
+    <% lots.forEach(function (l) { %>
+      <tr>
+        <td class="code"><%= l.code %></td>
+        <td class="mono small"><%= l.kephis_tag %></td>
+        <td class="num"><%= fromBp(l.germination_bp) %>%</td>
+        <td class="small"><%= l.retest_due_on %></td>
+        <td class="num"><%= kg(l.on_hand_g) %></td>
+        <td class="num"><%= money(l.unit_cost_cents) %></td>
+        <td>
+          <% if (l.overdue) { %><span class="pill bad">Retest overdue — blocked</span>
+          <% } else { %><span class="pill ok">Issuable</span><% } %>
+        </td>
+      </tr>
+    <% }); %>
+    </tbody>
+  </table>
+</div>
+
+<h2>Issue seed</h2>
+<div class="card">
+  <form method="post" action="/issues" class="grid">
+    <div style="grid-column:span 2"><label for="contract_id">Signed contract</label>
+      <select id="contract_id" name="contract_id" required>
+        <% contracts.forEach(function (c) {
+             var remaining = c.seed_entitlement_g - c.issued_g; %>
+          <option value="<%= c.id %>">
+            <%= c.code %> — <%= c.full_name %> · entitlement <%= kg(c.seed_entitlement_g) %> kg,
+            <%= kg(remaining) %> kg left
+          </option>
+        <% }); %>
+      </select></div>
+    <div><label for="lot_id">Lot</label>
+      <select id="lot_id" name="lot_id" required>
+        <% lots.forEach(function (l) { %>
+          <option value="<%= l.id %>" <%= l.overdue ? 'disabled' : '' %>>
+            <%= l.code %> · <%= kg(l.on_hand_g) %> kg on hand<%= l.overdue ? ' — RETEST OVERDUE' : '' %>
+          </option>
+        <% }); %>
+      </select></div>
+    <div><label for="qty_kg">Quantity (kg)</label>
+      <input id="qty_kg" name="qty_kg" class="num" required placeholder="8"></div>
+    <div><label for="notes">Notes</label><input id="notes" name="notes" placeholder="Collected at store"></div>
+    <div class="actions"><button type="submit">Issue seed</button></div>
+  </form>
+  <p class="small muted" style="margin-bottom:0">
+    Contracts that are not signed do not appear above, and a lot past its retest
+    date is refused even if you force the request.
+  </p>
+</div>
+
+<h2>Issued so far</h2>
+<div class="filters"><a class="btn ghost" href="/export/issues.csv">Export CSV</a></div>
+<div class="card scroll">
+  <table>
+    <thead><tr><th>Code</th><th>Date</th><th>Time</th><th>Farmer</th><th>Contract</th><th>Lot</th>
+      <th class="num">Quantity</th><th class="num">Cost / kg</th><th class="num">Value</th><th>Notes</th></tr></thead>
+    <tbody>
+    <% if (issues.length === 0) { %><tr><td colspan="10" class="empty">Nothing issued yet.</td></tr><% } %>
+    <% issues.forEach(function (i) { %>
+      <tr>
+        <td class="code"><%= i.code %></td>
+        <td class="small"><%= i.issued_on %></td>
+        <td class="small mono"><%= (i.issued_at || '').slice(11, 16) %></td>
+        <td><a href="/farmers/<%= i.farmer_id %>"><%= i.full_name %></a></td>
+        <td class="code"><%= i.contract_code %></td>
+        <td class="code"><%= i.lot_code %></td>
+        <td class="num"><%= kg(i.qty_g) %></td>
+        <td class="num"><%= money(i.unit_cost_cents) %></td>
+        <td class="num"><%= money(i.value_cents) %></td>
+        <td class="notes"><%= i.notes %></td>
+      </tr>
+    <% }); %>
+    </tbody>
+    <% if (issues.length) { %>
+      <tfoot><tr class="total">
+        <td colspan="6">TOTAL</td>
+        <td class="num"><%= kg(issues.reduce(function (s, i) { return s + i.qty_g; }, 0)) %></td>
+        <td></td>
+        <td class="num"><%= money(issues.reduce(function (s, i) { return s + i.value_cents; }, 0)) %></td>
+        <td></td>
+      </tr></tfoot>
+    <% } %>
+  </table>
+</div>
+<%- include('partials/foot') %>

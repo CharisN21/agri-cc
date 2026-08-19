@@ -1,0 +1,94 @@
+<%- include('partials/head') %>
+<h1>Settlements</h1>
+<p class="sub">
+  Approving releases money. That is why the person who graded the load cannot be
+  the person who approves its payout — and why a clerk cannot approve at all.
+</p>
+
+<% if (flash) { %><div class="flash err"><%= flash %></div><% } %>
+<% if (ok) { %><div class="flash ok"><%= ok %></div><% } %>
+<% if (ran !== null) { %><div class="flash ok">Payment worker ran: <%= ran %> paid.</div><% } %>
+
+<div class="filters">
+  <form method="get" action="/settlements" class="filters" style="margin:0">
+    <div><label for="status">Status</label>
+      <select id="status" name="status" onchange="this.form.submit()">
+        <option value="">All</option>
+        <% ['Pending', 'Approved', 'Paid', 'Rejected'].forEach(function (s) { %>
+          <option value="<%= s %>" <%= status === s ? 'selected' : '' %>><%= s %></option>
+        <% }); %>
+      </select></div>
+  </form>
+  <a class="btn ghost" href="/export/settlements.csv">Export CSV</a>
+  <% if (canPay) { %>
+    <form method="post" action="/payments/run" style="display:inline">
+      <button type="submit">Run the payment worker</button>
+    </form>
+  <% } %>
+</div>
+
+<% if (!canApprove) { %>
+  <div class="flash err">
+    Your role (<%= user.role.replace('_', ' ') %>) may not approve settlements.
+    You can see them, but the approve button is not yours.
+  </div>
+<% } %>
+
+<div class="card scroll">
+  <table>
+    <thead><tr>
+      <th>Code</th><th>Date</th><th>Farmer</th><th>Ward</th><th>Delivery</th><th>Grade</th>
+      <th class="num">Payable</th><th class="num">Price/kg</th><th class="num">Gross</th>
+      <th class="num">Cess</th><th class="num">Recovery</th><th>Cap</th>
+      <th class="num">Net</th><th class="num">Paid</th><th class="num">Balance</th>
+      <th>Status</th><th>Reference</th><th></th>
+    </tr></thead>
+    <tbody>
+    <% if (settlements.length === 0) { %><tr><td colspan="18" class="empty">No settlements.</td></tr><% } %>
+    <% settlements.forEach(function (s) { %>
+      <tr>
+        <td class="code"><a href="/settlements/<%= s.id %>"><%= s.code %></a></td>
+        <td class="small"><%= s.computed_on %></td>
+        <td><a href="/farmers/<%= s.farmer_id %>"><%= s.full_name %></a></td>
+        <td><%= s.ward_name %></td>
+        <td class="code"><%= s.delivery_code %></td>
+        <td><span class="pill <%= s.grade %>"><%= s.grade %></span></td>
+        <td class="num"><%= kg(s.payable_g) %></td>
+        <td class="num"><%= money(s.unit_price_cents) %></td>
+        <td class="num"><%= money(s.gross_value_cents) %></td>
+        <td class="num"><%= money(s.cess_cents) %></td>
+        <td class="num"><%= money(s.recovery_cents) %></td>
+        <td class="small muted"><%= s.recovery_cap %></td>
+        <td class="num"><%= money(s.net_payable_cents) %></td>
+        <td class="num"><%= money(s.amount_paid_cents) %></td>
+        <td class="num"><%= money(s.balance_cents) %></td>
+        <td><span class="pill <%= s.status %>"><%= s.status %></span></td>
+        <td class="mono small"><%= s.provider_ref || '—' %></td>
+        <td>
+          <% if (s.status === 'Pending' && canApprove) { %>
+            <form method="post" action="/settlements/<%= s.id %>/approve" style="display:inline">
+              <button type="submit">Approve</button>
+            </form>
+          <% } %>
+        </td>
+      </tr>
+    <% }); %>
+    </tbody>
+    <% if (settlements.length) { %>
+      <tfoot><tr class="total">
+        <td colspan="6">TOTAL</td>
+        <td class="num"><%= kg(settlements.reduce(function (a, s) { return a + s.payable_g; }, 0)) %></td>
+        <td></td>
+        <td class="num"><%= money(settlements.reduce(function (a, s) { return a + s.gross_value_cents; }, 0)) %></td>
+        <td class="num"><%= money(settlements.reduce(function (a, s) { return a + s.cess_cents; }, 0)) %></td>
+        <td class="num"><%= money(settlements.reduce(function (a, s) { return a + s.recovery_cents; }, 0)) %></td>
+        <td></td>
+        <td class="num"><%= money(settlements.reduce(function (a, s) { return a + s.net_payable_cents; }, 0)) %></td>
+        <td class="num"><%= money(settlements.reduce(function (a, s) { return a + s.amount_paid_cents; }, 0)) %></td>
+        <td class="num"><%= money(settlements.reduce(function (a, s) { return a + s.balance_cents; }, 0)) %></td>
+        <td colspan="3"></td>
+      </tr></tfoot>
+    <% } %>
+  </table>
+</div>
+<%- include('partials/foot') %>
