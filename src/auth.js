@@ -57,6 +57,23 @@ export const PERMISSIONS = {
   'settlement.approve': ['owner', 'ops_manager', 'finance'],   // NOT clerk
   'payment.run':      ['owner', 'finance'],
   'dashboard.view':   ['owner', 'ops_manager', 'finance'],
+
+  // --- v2 ---
+  // Referrals are a field activity; everyone can look, most can edit.
+  'lead.view':        ['owner', 'ops_manager', 'field_officer', 'clerk', 'finance'],
+  'lead.edit':        ['owner', 'ops_manager', 'field_officer', 'clerk'],
+
+  // Outsourcing keeps the same separation as contracted grain: the people who
+  // agree a price in the field are not the people who release the money.
+  'spot.view':        ['owner', 'ops_manager', 'field_officer', 'clerk', 'finance'],
+  'spot.buy':         ['owner', 'ops_manager', 'field_officer'],
+  'spot.pay':         ['owner', 'finance'],              // NOT the buyer
+  'spot.approve':     ['owner', 'ops_manager'],          // spot price, reopen a run
+
+  // Everyone sees the target. Only the owner sets it.
+  'target.view':      ['owner', 'ops_manager', 'field_officer', 'clerk', 'finance'],
+  'target.edit':      ['owner'],
+  'calculator.use':   ['owner', 'ops_manager', 'field_officer', 'clerk', 'finance'],
 };
 
 export function can(user, permission) {

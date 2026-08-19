@@ -59,7 +59,7 @@ export default function mountFarmers(app) {
     const farmer = repo.getFarmer(Number(req.params.id));
     if (!farmer) return res.status(404).render('error',
       { title: 'Not found', status: 404, message: 'No such farmer.' });
-    const season = repo.currentSeason();
+    const season = req.season;
     res.render('farmer', {
       title: farmer.full_name,
       farmer,

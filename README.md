@@ -249,3 +249,66 @@ Two ways to get real persistence:
    schema and the same triggers are already in `migrations/supabase.sql`; the
    work is swapping the driver and the queries in `src/repo.js`. The app then
    becomes stateless and any free host will do.
+
+---
+
+# v2 — outsourcing, targets, referrals
+
+The second build adds the things the client asked for after seeing v1.
+
+## Supply runs (outsourcing)
+
+Buying from farmers we never contracted. The unit of work is the **trip**, not
+the load, because one lorry hire covers everything on board — and landed cost
+per tonne only means something once the trip's costs are spread across what it
+brought back.
+
+- Open a run, buy loads onto it, record what the trip cost (transport, fuel,
+  labour, loading, field officer food, housing allowance, levies), then close it.
+- Grading uses **exactly** the same rules as contracted grain — one
+  `quality_test` table serves both, so the criteria cannot drift apart.
+- Each run reports grain cost per tonne, trip cost per tonne, and the true
+  landed cost — then compares it against what contracted grain **actually** cost
+  this season (not the headline base price, which would flatter it).
+- Trip costs are allocated across loads by weight using largest-remainder, so
+  the shares always add back to exactly the total. No cent is lost or invented.
+
+### Negotiated prices stay auditable
+
+Spot loads have their own immutable, versioned price schedule. Every purchase
+stores **two** prices: what the grade said it was worth, and what the officer
+actually agreed. A negotiated price is allowed — but a database trigger refuses
+one that gives no reason. Six months later you can still see which deals were
+struck above the grade, by how much, and why.
+
+## Targets
+
+The owner sets a company tonnage target and a target per ward. A field officer
+sees **their own ward's** number on a strip at the top of every screen; everyone
+else sees the company total. Nobody has to open a dashboard they may not have
+access to in order to know whether the season is on track.
+
+## Referrals
+
+A working list of contractors to call. Deliberately mutable — a lead is a note,
+not a financial record — but every logged call **appends** a dated line rather
+than overwriting, so nothing said on the phone is lost. A lead converts to a
+supplier in one click.
+
+## Seed cost calculator
+
+Acreage × seeding rate × lot cost, for the owner planning a season and the field
+officer standing in front of a farmer. Seeding rates live in the `seeding_rate`
+table, so the agronomic assumption is data the owner can change. It also shows
+how much grain the farmer must deliver just to clear the seed debt.
+
+## Season selector and units
+
+Every screen is scoped to a season, chosen from the top bar and remembered in a
+cookie. Weights read in kilograms or tonnes on a toggle; storage is always grams.
+
+## New roles rules
+
+The v1 principle — the person who decides the grade never releases the money —
+extends to outsourcing: a field officer can **buy** a spot load but cannot
+**pay** for one. Only the owner can change a target or a spot price.

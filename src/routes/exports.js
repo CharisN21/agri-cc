@@ -137,7 +137,7 @@ export default function mountExports(app) {
     if (!build) return res.status(404).render('error',
       { title: 'Not found', status: 404, message: `Cannot export "${req.params.entity}".` });
 
-    const season = repo.currentSeason();
+    const season = req.season;
     const { headers, body, total } = build(season.id);
     const filename = exportFilename(config.brand, req.params.entity, now().on);
 

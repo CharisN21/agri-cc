@@ -9,7 +9,7 @@ export default function mountContracts(app) {
   r.use(requireLogin);
 
   r.get('/', requirePermission('contract.view'), (req, res) => {
-    const season = repo.currentSeason();
+    const season = req.season;
     res.render('contracts', {
       title: 'Contracts',
       contracts: repo.listContracts({ seasonId: season.id, status: req.query.status || null }),
@@ -23,7 +23,7 @@ export default function mountContracts(app) {
 
   r.post('/', requirePermission('contract.edit'), (req, res) => {
     try {
-      const season = repo.currentSeason();
+      const season = req.season;
       const farmerId = Number(req.body.farmer_id);
       const parcels = repo.farmerParcels(farmerId);
       if (parcels.length === 0) throw new Error('that farmer has no parcel on file yet');

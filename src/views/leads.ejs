@@ -1,0 +1,119 @@
+<%- include('partials/head') %>
+<h1>Referrals</h1>
+<p class="sub">
+  People worth calling about supplying us. Every logged call appends a dated
+  line to the notes rather than overwriting them, so nothing said on the phone
+  gets lost.
+</p>
+
+<% if (flash) { %><div class="flash err"><%= flash %></div><% } %>
+<% if (ok) { %><div class="flash ok"><%= ok %></div><% } %>
+
+<div class="tiles">
+  <div class="tile">
+    <div class="label">Due to call back</div>
+    <div class="value <%= stats.due ? 'badge-neg' : '' %>"><%= stats.due %></div>
+    <div class="target">follow-up date reached</div>
+  </div>
+  <div class="tile">
+    <div class="label">Could supply</div>
+    <div class="value"><%= weight(stats.potentialG, unit).value %> <%= weight(stats.potentialG, unit).suffix %></div>
+    <div class="target">from leads still in play</div>
+  </div>
+  <% stats.byStatus.forEach(function (s) { %>
+    <div class="tile">
+      <div class="label"><%= s.status %></div>
+      <div class="value"><%= s.n %></div>
+    </div>
+  <% }); %>
+</div>
+
+<form class="filters" method="get" action="/leads" style="margin-top:1rem">
+  <div><label for="q">Search</label>
+    <input id="q" name="q" value="<%= q %>" placeholder="name, phone or area"></div>
+  <div><label for="status">Status</label>
+    <select id="status" name="status" onchange="this.form.submit()">
+      <option value="">All</option>
+      <% ['To call','Called','Interested','Not interested','Converted'].forEach(function (s) { %>
+        <option value="<%= s %>" <%= status === s ? 'selected' : '' %>><%= s %></option>
+      <% }); %>
+    </select></div>
+  <div><label for="due">Due only</label>
+    <select id="due" name="due" onchange="this.form.submit()">
+      <option value="">No</option>
+      <option value="1" <%= due ? 'selected' : '' %>>Due to call back</option>
+    </select></div>
+  <button type="submit">Filter</button>
+</form>
+
+<h2>Add a referral</h2>
+<div class="card">
+  <form method="post" action="/leads" class="grid">
+    <div><label for="name">Name</label><input id="name" name="name" required></div>
+    <div><label for="phone">Phone</label><input id="phone" name="phone" placeholder="2547…"></div>
+    <div><label for="area">Area</label><input id="area" name="area" placeholder="village, market, road"></div>
+    <div><label for="ward_id">Ward</label>
+      <select id="ward_id" name="ward_id">
+        <option value="">Not known</option>
+        <% wards.forEach(function (w) { %><option value="<%= w.id %>"><%= w.name %></option><% }); %>
+      </select></div>
+    <div><label for="can_supply_kg">Could supply (kg)</label>
+      <input id="can_supply_kg" name="can_supply_kg" class="num" placeholder="2000"></div>
+    <div><label for="source">Referred by</label><input id="source" name="source"></div>
+    <div><label for="follow_up_on">Call back on</label>
+      <input id="follow_up_on" name="follow_up_on" type="date"></div>
+    <div style="grid-column:1/-1"><label for="notes">First note</label>
+      <input id="notes" name="notes" placeholder="what they said, what they grow"></div>
+    <div class="actions"><button type="submit">Add referral</button></div>
+  </form>
+</div>
+
+<h2><%= leads.length %> referral<%= leads.length === 1 ? '' : 's' %></h2>
+<div class="card">
+  <% if (leads.length === 0) { %>
+    <p class="empty">Nothing here yet. Add the first name above.</p>
+  <% } %>
+  <% leads.forEach(function (l) {
+       var overdue = l.follow_up_on && l.follow_up_on <= today
+                     && l.status !== 'Converted' && l.status !== 'Not interested'; %>
+    <div class="lead-card">
+      <div class="lead-head">
+        <span class="nm"><%= l.name %></span>
+        <span class="mono small muted"><%= l.code %></span>
+        <span class="pill <%= l.status === 'Converted' ? 'Paid' : l.status === 'Interested' ? 'ok' : l.status === 'Not interested' ? 'bad' : 'Pending' %>"><%= l.status %></span>
+        <% if (l.phone) { %><a class="mono small" href="tel:<%= l.phone %>"><%= l.phone %></a><% } %>
+        <% if (l.area) { %><span class="small muted"><%= l.area %></span><% } %>
+        <% if (l.ward_name) { %><span class="small muted"><%= l.ward_name %> ward</span><% } %>
+        <% if (l.can_supply_g) { %>
+          <span class="small">~<%= weight(l.can_supply_g, unit).value %> <%= weight(l.can_supply_g, unit).suffix %></span>
+        <% } %>
+        <span class="spacer" style="flex:1"></span>
+        <% if (overdue) { %><span class="small due">call back — due <%= l.follow_up_on %></span>
+        <% } else if (l.follow_up_on) { %><span class="small muted">call back <%= l.follow_up_on %></span><% } %>
+        <% if (l.supplier_code) { %><span class="small muted">→ <%= l.supplier_code %></span><% } %>
+      </div>
+
+      <% if (l.notes) { %><pre class="lead-notes"><%= l.notes %></pre><% } %>
+
+      <% if (l.status !== 'Converted') { %>
+        <form method="post" action="/leads/<%= l.id %>/contact" class="grid" style="margin-top:0.5rem">
+          <div><label for="st<%= l.id %>">Outcome</label>
+            <select id="st<%= l.id %>" name="status">
+              <% ['To call','Called','Interested','Not interested'].forEach(function (s) { %>
+                <option value="<%= s %>" <%= l.status === s ? 'selected' : '' %>><%= s %></option>
+              <% }); %>
+            </select></div>
+          <div style="grid-column:span 2"><label for="n<%= l.id %>">What they said</label>
+            <input id="n<%= l.id %>" name="notes" placeholder="appended with today's date"></div>
+          <div><label for="f<%= l.id %>">Call back on</label>
+            <input id="f<%= l.id %>" name="follow_up_on" type="date" value="<%= l.follow_up_on || '' %>"></div>
+          <div class="actions"><button type="submit">Log call</button></div>
+        </form>
+        <form method="post" action="/leads/<%= l.id %>/convert" style="margin-top:0.35rem">
+          <button class="ghost" type="submit">Make them a supplier →</button>
+        </form>
+      <% } %>
+    </div>
+  <% }); %>
+</div>
+<%- include('partials/foot') %>

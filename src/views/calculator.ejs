@@ -1,0 +1,111 @@
+<%- include('partials/head') %>
+<h1>Seed cost calculator</h1>
+<p class="sub">
+  Work out what a plot's seed will cost before anything is issued. Nothing here
+  is saved — it is for the conversation you are having with the farmer now.
+</p>
+
+<% if (error) { %><div class="flash err"><%= error %></div><% } %>
+
+<div class="card">
+  <form method="get" action="/calculator" class="grid">
+    <div>
+      <label for="acreage">Plot size (acres)</label>
+      <input id="acreage" name="acreage" class="num" required autofocus
+             value="<%= input.acreage %>" placeholder="2.50">
+    </div>
+    <div>
+      <label for="rate_id">Seeding rate</label>
+      <select id="rate_id" name="rate_id">
+        <% rates.forEach(function (r) { %>
+          <option value="<%= r.id %>" <%= String(r.id) === String(input.rate_id) ? 'selected' : '' %>>
+            <%= r.label.trim() %>
+          </option>
+        <% }); %>
+      </select>
+    </div>
+    <div>
+      <label for="lot_id">Seed lot</label>
+      <select id="lot_id" name="lot_id">
+        <% if (lots.length === 0) { %><option value="">no issuable lot</option><% } %>
+        <% lots.forEach(function (l) { %>
+          <option value="<%= l.id %>" <%= String(l.id) === String(input.lot_id) ? 'selected' : '' %>>
+            <%= l.code %> — KES <%= money(l.unit_cost_cents) %>/kg
+          </option>
+        <% }); %>
+      </select>
+    </div>
+    <div>
+      <label for="price">Expected grain price (KES/kg)</label>
+      <input id="price" name="price" class="num" value="<%= input.price %>" placeholder="58.00">
+    </div>
+    <div class="actions">
+      <button type="submit">Calculate</button>
+      <a class="btn ghost" href="/calculator">Clear</a>
+    </div>
+  </form>
+  <p class="small muted" style="margin-bottom:0">
+    Rates come from the seeding-rate table, so the owner can change the
+    assumption without a developer. Lots overdue for germination retest are not
+    offered — they cannot be issued anyway.
+  </p>
+</div>
+
+<% if (result) { %>
+  <div class="tiles">
+    <div class="tile">
+      <div class="label">Seed required</div>
+      <div class="value"><%= kg(result.qtyG) %> kg</div>
+      <div class="target"><%= result.rate.label.trim() %></div>
+    </div>
+    <div class="tile">
+      <div class="label">Cost of seed</div>
+      <div class="value">KES <%= money(result.valueCents) %></div>
+      <div class="target">lot <%= result.lot.code %> at KES <%= money(result.lot.unit_cost_cents) %>/kg</div>
+    </div>
+    <% if (result.expectedPriceCents > 0) { %>
+      <div class="tile">
+        <div class="label">Grain needed to clear it</div>
+        <div class="value"><%= kg(result.breakEvenG) %> kg</div>
+        <div class="target">at KES <%= money(result.expectedPriceCents) %>/kg</div>
+      </div>
+    <% } %>
+    <div class="tile">
+      <div class="label">Stock on that lot</div>
+      <div class="value"><%= kg(result.lot.on_hand_g) %> kg</div>
+      <div class="target <%= result.enoughStock ? '' : 'badge-neg' %>">
+        <%= result.enoughStock ? 'enough to issue' : 'NOT enough for this plot' %>
+      </div>
+    </div>
+  </div>
+
+  <div class="split">
+    <div class="card">
+      <h3>The working</h3>
+      <div class="working">
+        <div class="row"><span class="lbl">Plot size</span><span class="val"><%= input.acreage %> acres</span></div>
+        <div class="row"><span class="lbl">Seeding rate</span><span class="val"><%= kg(result.rate.g_per_acre) %> kg / acre</span></div>
+        <div class="row"><span class="lbl">Seed required</span><span class="val"><%= kg(result.qtyG) %> kg</span></div>
+        <div class="row"><span class="lbl">Cost per kg (lot <%= result.lot.code %>)</span><span class="val">KES <%= money(result.lot.unit_cost_cents) %></span></div>
+        <div class="row total"><span class="lbl">Cost of seed</span><span class="val">KES <%= money(result.valueCents) %></span></div>
+      </div>
+    </div>
+
+    <% if (result.expectedPriceCents > 0) { %>
+      <div class="card">
+        <h3>What it means at harvest</h3>
+        <p class="small">
+          At KES <%= money(result.expectedPriceCents) %>/kg this farmer must deliver
+          <strong><%= kg(result.breakEvenG) %> kg</strong> simply to clear the seed debt —
+          before earning anything.
+        </p>
+        <p class="small muted" style="margin-bottom:0">
+          Recovery is capped, so the debt will not all come out of one load. A
+          farmer never goes home with less than the cash floor of
+          KES <%= schedule ? money(schedule.cash_floor_cents) : '2,000.00' %>.
+        </p>
+      </div>
+    <% } %>
+  </div>
+<% } %>
+<%- include('partials/foot') %>

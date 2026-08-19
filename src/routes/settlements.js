@@ -8,7 +8,7 @@ export default function mountSettlements(app) {
   r.use(requireLogin);
 
   r.get('/', requirePermission('settlement.view'), (req, res) => {
-    const season = repo.currentSeason();
+    const season = req.season;
     res.render('settlements', {
       title: 'Settlements',
       settlements: repo.listSettlements({ seasonId: season.id, status: req.query.status || null }),

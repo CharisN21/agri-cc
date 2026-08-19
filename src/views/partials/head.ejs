@@ -15,28 +15,45 @@
   </script>
 </head>
 <body>
-<header class="top">
-  <span class="brand">☀ SUNFLOWER OUTGROWER</span>
-  <% if (typeof user !== 'undefined' && user) { %>
-    <nav>
-      <a href="/dashboard">Dashboard</a>
-      <a href="/farmers">Farmers</a>
-      <a href="/contracts">Contracts</a>
-      <a href="/issues">Input issue</a>
-      <a href="/deliveries">Deliveries</a>
-      <a href="/settlements">Settlements</a>
-      <a href="/cloud">Cloud</a>
-    </nav>
-    <span class="spacer"></span>
-    <span class="who"><%= user.full_name %> · <%= user.role.replace('_', ' ') %></span>
-  <% } else { %>
-    <span class="spacer"></span>
-  <% } %>
-  <button class="ghost" id="theme-toggle" type="button" title="Toggle dark mode">◐</button>
-  <% if (typeof user !== 'undefined' && user) { %>
-    <form method="post" action="/logout" style="display:inline">
-      <button class="ghost" type="submit">Sign out</button>
-    </form>
-  <% } %>
-</header>
-<main>
+<% if (typeof user !== 'undefined' && user) { %>
+  <div class="shell">
+    <%- include('nav') %>
+    <div class="content">
+      <header class="topbar">
+        <button class="icon" id="nav-toggle" type="button" aria-label="Menu">☰</button>
+
+        <% if (typeof season !== 'undefined' && season) { %>
+          <form method="get" class="season-pick" id="season-form">
+            <label class="sr-only" for="season">Season</label>
+            <select id="season" name="season" onchange="this.form.submit()">
+              <% seasons.forEach(function (s) { %>
+                <option value="<%= s.id %>" <%= s.id === season.id ? 'selected' : '' %>>
+                  <%= s.name %><%= s.status === 'closed' ? ' (closed)' : '' %>
+                </option>
+              <% }); %>
+            </select>
+          </form>
+        <% } %>
+
+        <div class="unit-pick" role="group" aria-label="Weight units">
+          <a class="<%= unit === 'kg' ? 'on' : '' %>" href="?unit=kg">kg</a>
+          <a class="<%= unit === 't' ? 'on' : '' %>" href="?unit=t">t</a>
+        </div>
+
+        <span class="spacer"></span>
+        <span class="who"><%= user.full_name %> · <%= user.role.replace('_', ' ') %></span>
+        <button class="icon" id="theme-toggle" type="button" aria-label="Toggle dark mode">◐</button>
+        <form method="post" action="/logout" style="display:inline">
+          <button class="ghost" type="submit">Sign out</button>
+        </form>
+      </header>
+
+      <% if (typeof progress !== 'undefined' && progress && progress.targetG > 0) { %>
+        <%- include('progress', { p: progress }) %>
+      <% } %>
+
+      <main>
+<% } else { %>
+  <div class="plain">
+    <main>
+<% } %>

@@ -1,0 +1,153 @@
+<%- include('partials/head') %>
+<h1>Outsourcing</h1>
+<p class="sub">
+  Buying from farmers we never contracted. Costs attach to the trip, not the
+  load, because one lorry hire covers everything on board — and that is the only
+  way landed cost per tonne means anything.
+</p>
+
+<% if (flash) { %><div class="flash err"><%= flash %></div><% } %>
+<% if (ok) { %><div class="flash ok"><%= ok %></div><% } %>
+
+<div class="tiles">
+  <div class="tile">
+    <div class="label">Bought this season</div>
+    <div class="value"><%= weight(totals.payable_g, unit).value %> <%= weight(totals.payable_g, unit).suffix %></div>
+    <div class="target"><%= totals.loads %> load(s)</div>
+  </div>
+  <div class="tile">
+    <div class="label">Paid to suppliers</div>
+    <div class="value"><%= money(totals.purchase_cents) %></div>
+  </div>
+  <div class="tile">
+    <div class="label">Trip costs</div>
+    <div class="value"><%= money(totals.overheadCents) %></div>
+    <div class="target">transport, labour, food, housing</div>
+  </div>
+  <div class="tile">
+    <div class="label">Landed cost / tonne</div>
+    <div class="value"><%= money(totals.landedPerTonneCents) %></div>
+    <div class="target">grain <%= money(totals.landedPerTonneCents - totals.overheadPerTonneCents) %>
+      + trip <%= money(totals.overheadPerTonneCents) %></div>
+  </div>
+  <% if (totals.unpaid_cents > 0) { %>
+    <div class="tile">
+      <div class="label">Owed to suppliers</div>
+      <div class="value badge-neg"><%= money(totals.unpaid_cents) %></div>
+    </div>
+  <% } %>
+</div>
+
+<% if (!spotSchedule) { %>
+  <div class="flash err" style="margin-top:1rem">
+    No spot price schedule for this season yet, so nothing can be bought.
+    Set one below.
+  </div>
+<% } %>
+
+<h2>Open a supply run</h2>
+<div class="card">
+  <form method="post" action="/outsourcing/runs" class="grid">
+    <div><label for="area">Where is the trip going</label>
+      <input id="area" name="area" required placeholder="Subukia market and around"></div>
+    <div><label for="vehicle_reg">Vehicle</label><input id="vehicle_reg" name="vehicle_reg" placeholder="KAA 123B"></div>
+    <div><label for="started_on">Date</label>
+      <input id="started_on" name="started_on" type="date" value="<%= today %>"></div>
+    <div style="grid-column:1/-1"><label for="notes">Notes</label><input id="notes" name="notes"></div>
+    <div class="actions"><button type="submit" <%= spotSchedule ? '' : 'disabled' %>>Open run</button></div>
+  </form>
+</div>
+
+<div class="filters">
+  <form method="get" action="/outsourcing" class="filters" style="margin:0">
+    <div><label for="status">Status</label>
+      <select id="status" name="status" onchange="this.form.submit()">
+        <option value="">All</option>
+        <option value="Open" <%= status === 'Open' ? 'selected' : '' %>>Open</option>
+        <option value="Closed" <%= status === 'Closed' ? 'selected' : '' %>>Closed</option>
+      </select></div>
+  </form>
+</div>
+
+<div class="card scroll">
+  <table>
+    <thead><tr><th>Run</th><th>Date</th><th>Area</th><th>Officer</th>
+      <th class="num">Loads</th><th class="num">Bought</th><th class="num">To suppliers</th>
+      <th class="num">Trip costs</th><th class="num">Landed / t</th><th>Status</th></tr></thead>
+    <tbody>
+    <% if (runs.length === 0) { %>
+      <tr><td colspan="10" class="empty">No supply runs yet.</td></tr>
+    <% } %>
+    <% runs.forEach(function (r) {
+         var landed = r.purchase_cents + r.overhead_cents;
+         var perTonne = r.payable_g ? Math.round(landed * 1000000 / r.payable_g) : 0; %>
+      <tr>
+        <td class="code"><a href="/outsourcing/runs/<%= r.id %>"><%= r.code %></a></td>
+        <td class="small"><%= r.started_on %></td>
+        <td class="small"><%= r.area %></td>
+        <td class="small"><%= r.officer_name || '—' %></td>
+        <td class="num"><%= r.loads %></td>
+        <td class="num"><%= weight(r.payable_g, unit).value %></td>
+        <td class="num"><%= money(r.purchase_cents) %></td>
+        <td class="num"><%= money(r.overhead_cents) %></td>
+        <td class="num"><%= perTonne ? money(perTonne) : '—' %></td>
+        <td><span class="pill <%= r.status === 'Open' ? 'Pending' : 'Paid' %>"><%= r.status %></span></td>
+      </tr>
+    <% }); %>
+    </tbody>
+    <% if (runs.length) { %>
+      <tfoot><tr class="total">
+        <td colspan="4">TOTAL</td>
+        <td class="num"><%= runs.reduce(function (a, r) { return a + r.loads; }, 0) %></td>
+        <td class="num"><%= weight(runs.reduce(function (a, r) { return a + r.payable_g; }, 0), unit).value %></td>
+        <td class="num"><%= money(runs.reduce(function (a, r) { return a + r.purchase_cents; }, 0)) %></td>
+        <td class="num"><%= money(runs.reduce(function (a, r) { return a + r.overhead_cents; }, 0)) %></td>
+        <td colspan="2"></td>
+      </tr></tfoot>
+    <% } %>
+  </table>
+</div>
+
+<h2>Spot price schedule</h2>
+<div class="card">
+  <% if (spotSchedule) { %>
+    <div class="tiles">
+      <div class="tile"><div class="label">Version</div><div class="value">v<%= spotSchedule.version %></div>
+        <div class="target">from <%= spotSchedule.effective_from %></div></div>
+      <div class="tile"><div class="label">Base price</div><div class="value"><%= money(spotSchedule.base_price_cents) %></div>
+        <div class="target">per kg</div></div>
+      <div class="tile"><div class="label">Oil premium</div><div class="value"><%= money(spotSchedule.oil_premium_cents) %></div>
+        <div class="target">per point</div></div>
+      <div class="tile"><div class="label">Cess</div><div class="value"><%= fromBp(spotSchedule.cess_bp) %>%</div></div>
+    </div>
+    <p class="small muted">
+      Separate from the contracted schedule, so outsourced grain can be priced
+      independently. Immutable — a change inserts a new version.
+    </p>
+  <% } else { %>
+    <p class="empty">No spot schedule for this season.</p>
+  <% } %>
+
+  <% if (user.role === 'owner' || user.role === 'ops_manager') { %>
+    <form method="post" action="/outsourcing/spot-price" class="grid">
+      <div><label for="base_price">Base price (KES/kg)</label>
+        <input id="base_price" name="base_price" class="num" required
+               value="<%= spotSchedule ? fromCents(spotSchedule.base_price_cents) : '55.00' %>"></div>
+      <div><label for="oil_premium">Oil premium / point</label>
+        <input id="oil_premium" name="oil_premium" class="num" required
+               value="<%= spotSchedule ? fromCents(spotSchedule.oil_premium_cents) : '1.50' %>"></div>
+      <div><label for="moisture_discount">Moisture discount / point</label>
+        <input id="moisture_discount" name="moisture_discount" class="num" required
+               value="<%= spotSchedule ? fromCents(spotSchedule.moisture_discount_cents) : '2.00' %>"></div>
+      <div><label for="damage_discount">Damage discount / point</label>
+        <input id="damage_discount" name="damage_discount" class="num" required
+               value="<%= spotSchedule ? fromCents(spotSchedule.damage_discount_cents) : '1.20' %>"></div>
+      <div><label for="cess_bp">Cess (basis points)</label>
+        <input id="cess_bp" name="cess_bp" class="num" value="<%= spotSchedule ? spotSchedule.cess_bp : 50 %>"></div>
+      <div><label for="effective_from">Effective from</label>
+        <input id="effective_from" name="effective_from" type="date" value="<%= today %>"></div>
+      <div class="actions"><button type="submit">Save as new version</button></div>
+    </form>
+  <% } %>
+</div>
+<%- include('partials/foot') %>

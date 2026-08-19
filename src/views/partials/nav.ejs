@@ -1,0 +1,55 @@
+<%
+  // Progressive disclosure: the sidebar shows sections, and a section opens
+  // when you are inside it. A clerk should not have to read past screens they
+  // cannot use to reach the one they can, so every entry is permission-gated
+  // and an empty section is not rendered at all.
+  var path = (typeof currentPath !== 'undefined' && currentPath) ? currentPath : '';
+  var role = user.role;
+  var allow = function (roles) { return roles.indexOf(role) !== -1; };
+  var ALL = ['owner','ops_manager','field_officer','clerk','finance'];
+
+  var sections = [
+    { title: 'Overview', items: [
+      { href: '/dashboard', label: 'Dashboard', roles: ['owner','ops_manager','finance'] },
+      { href: '/targets',   label: 'Targets',   roles: ALL },
+    ]},
+    { title: 'Contracted', items: [
+      { href: '/farmers',     label: 'Farmers',     roles: ALL },
+      { href: '/contracts',   label: 'Contracts',   roles: ALL },
+      { href: '/issues',      label: 'Input issue', roles: ALL },
+      { href: '/deliveries',  label: 'Deliveries',  roles: ALL },
+      { href: '/settlements', label: 'Settlements', roles: ['owner','ops_manager','clerk','finance'] },
+    ]},
+    { title: 'Outsourcing', items: [
+      { href: '/outsourcing',           label: 'Supply runs', roles: ALL },
+      { href: '/outsourcing/suppliers', label: 'Suppliers',   roles: ALL },
+      { href: '/leads',                 label: 'Referrals',   roles: ALL },
+    ]},
+    { title: 'Tools', items: [
+      { href: '/calculator', label: 'Cost calculator', roles: ALL },
+      { href: '/cloud',      label: 'Cloud mirror',    roles: ['owner','ops_manager','finance'] },
+    ]},
+  ];
+
+  var isOn = function (href) {
+    if (href === '/outsourcing') return path === '/outsourcing' || path.indexOf('/outsourcing/runs') === 0;
+    return path === href || (href !== '/' && path.indexOf(href + '/') === 0);
+  };
+%>
+<nav class="sidebar" id="sidebar">
+  <a class="brand" href="/">☀ <span>SUNFLOWER</span></a>
+
+  <% sections.forEach(function (sec) {
+       var items = sec.items.filter(function (i) { return allow(i.roles); });
+       if (items.length === 0) return;
+       var open = items.some(function (i) { return isOn(i.href); }); %>
+    <details class="sec" <%= open ? 'open' : '' %>>
+      <summary><%= sec.title %></summary>
+      <ul>
+        <% items.forEach(function (i) { %>
+          <li><a href="<%= i.href %>" class="<%= isOn(i.href) ? 'on' : '' %>"><%= i.label %></a></li>
+        <% }); %>
+      </ul>
+    </details>
+  <% }); %>
+</nav>

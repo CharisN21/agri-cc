@@ -1,0 +1,23 @@
+<%
+  // The target strip. A field officer sees their own ward here; everyone else
+  // sees the company total. It is on every screen because "are we on track"
+  // should never require opening a dashboard you may not have access to.
+  var w = Math.min(100, p.achievedBp / 100).toFixed(1);
+  var cls = p.achievedBp >= 8000 ? 'high' : p.achievedBp >= 5000 ? 'mid' : 'low';
+  var d = weight(p.deliveredG, unit), t = weight(p.targetG, unit), s = weight(p.shortfallG, unit);
+%>
+<div class="strip">
+  <span class="lbl"><%= p.label %></span>
+  <span class="fig"><%= d.value %> <%= d.suffix %></span>
+  <span class="of">of</span>
+  <span class="fig"><%= t.value %> <%= t.suffix %></span>
+  <div class="bar <%= cls %>" title="<%= fromBp(p.achievedBp) %>% of target">
+    <span style="width:<%= w %>%"></span>
+  </div>
+  <span class="pc"><%= fromBp(p.achievedBp) %>%</span>
+  <% if (p.shortfallG > 0) { %>
+    <span class="gap"><%= s.value %> <%= s.suffix %> to go</span>
+  <% } else { %>
+    <span class="gap done">target met</span>
+  <% } %>
+</div>

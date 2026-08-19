@@ -15,8 +15,10 @@ async function main() {
     case 'seed': {
       console.log('Seeding...');
       const { seed, seedPayments, applySeedPassword } = await import('./seed.js');
+      const { seedV2 } = await import('./seed-v2.js');
       seed();
       await seedPayments();
+      seedV2();
       // Runs whether or not seed() did anything, so changing SEED_PASSWORD on a
       // host that kept its database file still takes effect.
       applySeedPassword();

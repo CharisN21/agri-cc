@@ -7,11 +7,16 @@ import {
 import * as repo from '../repo.js';
 import { dashboard, widgetSummary } from '../dashboard.js';
 import { drainOutbox } from '../payments/worker.js';
+import { outsourcingTotals } from '../repo-outsourcing.js';
+import { targetProgress } from '../repo-admin.js';
 import mountFarmers from './farmers.js';
 import mountContracts from './contracts.js';
 import mountDeliveries from './deliveries.js';
 import mountSettlements from './settlements.js';
 import mountExports from './exports.js';
+import mountLeads from './leads.js';
+import mountOutsourcing from './outsourcing.js';
+import mountAdmin from './admin.js';
 
 /** The app's idea of "now", in the two shapes the schema stores. */
 export function now() {
@@ -52,10 +57,12 @@ export default function mountRoutes(app) {
 
   // --- dashboard ----------------------------------------------------------
   app.get('/dashboard', requireLogin, requirePermission('dashboard.view'), (req, res) => {
-    const season = repo.currentSeason();
+    const season = req.season;
     res.render('dashboard', {
       title: 'Owner dashboard',
       d: dashboard(season.id, { asOf: now().on }),
+      outsourcing: outsourcingTotals(season.id),
+      targets: targetProgress(season.id),
     });
   });
 
@@ -64,7 +71,7 @@ export default function mountRoutes(app) {
   // never hang because our page is slow.
   app.get('/api/widget', (req, res) => {
     try {
-      const season = repo.currentSeason();
+      const season = req.season;
       if (!season) return res.status(503).json({ error: 'no open season' });
       res.set('Cache-Control', 'public, max-age=30');
       res.json(widgetSummary(season.id, { asOf: now().on }));
@@ -87,7 +94,7 @@ export default function mountRoutes(app) {
   issues.use(requireLogin);
 
   issues.get('/', requirePermission('delivery.view'), (req, res) => {
-    const season = repo.currentSeason();
+    const season = req.season;
     res.render('issues', {
       title: 'Input issue',
       lots: repo.listLots(now().on),
@@ -124,6 +131,9 @@ export default function mountRoutes(app) {
   mountDeliveries(app);
   mountSettlements(app);
   mountExports(app);
+  mountLeads(app);
+  mountOutsourcing(app);
+  mountAdmin(app);
 
   // --- cloud mirror status ------------------------------------------------
   app.get('/cloud', requireLogin, requirePermission('dashboard.view'), async (req, res) => {

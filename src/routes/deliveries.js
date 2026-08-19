@@ -10,7 +10,7 @@ export default function mountDeliveries(app) {
   r.use(requireLogin);
 
   r.get('/', requirePermission('delivery.view'), (req, res) => {
-    const season = repo.currentSeason();
+    const season = req.season;
     res.render('deliveries', {
       title: 'Deliveries',
       deliveries: repo.listDeliveries({ seasonId: season.id, status: req.query.status || null }),

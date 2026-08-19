@@ -1,0 +1,157 @@
+<%- include('partials/head') %>
+<%
+  var totalTargetG = progress.reduce(function (s, w) { return s + w.target_g; }, 0);
+  var totalDoneG   = progress.reduce(function (s, w) { return s + w.totalG; }, 0);
+  var gap = season.target_g - totalTargetG;
+  function cls(bp) { return bp >= 8000 ? 'high' : bp >= 5000 ? 'mid' : 'low'; }
+%>
+<h1>Targets</h1>
+<p class="sub">
+  <%= season.name %> · the owner sets these; every other role sees their own
+  number on the strip at the top of every screen.
+</p>
+
+<% if (flash) { %><div class="flash err"><%= flash %></div><% } %>
+<% if (ok) { %><div class="flash ok"><%= ok %></div><% } %>
+
+<div class="tiles">
+  <div class="tile">
+    <div class="label">Company target</div>
+    <div class="value"><%= weight(season.target_g, unit).value %> <%= weight(season.target_g, unit).suffix %></div>
+    <div class="target"><%= season.starts_on %> to <%= season.ends_on %></div>
+  </div>
+  <div class="tile">
+    <div class="label">Collected so far</div>
+    <div class="value"><%= weight(totalDoneG, unit).value %> <%= weight(totalDoneG, unit).suffix %></div>
+    <div class="target">contracted plus outsourced</div>
+  </div>
+  <div class="tile">
+    <div class="label">Ward targets add up to</div>
+    <div class="value"><%= weight(totalTargetG, unit).value %> <%= weight(totalTargetG, unit).suffix %></div>
+    <div class="target <%= gap === 0 ? '' : 'badge-neg' %>">
+      <% if (gap > 0) { %><%= weight(gap, unit).value %> <%= weight(gap, unit).suffix %> unallocated
+      <% } else if (gap < 0) { %><%= weight(-gap, unit).value %> <%= weight(-gap, unit).suffix %> over the company target
+      <% } else { %>matches the company target<% } %>
+    </div>
+  </div>
+</div>
+
+<h2>Progress by ward</h2>
+<div class="card scroll">
+  <table>
+    <thead><tr>
+      <th>Ward</th><th class="num">Target</th><th class="num">Contracted</th>
+      <th class="num">Outsourced</th><th class="num">Total</th><th class="num">Achieved</th>
+      <th class="num">To go</th>
+    </tr></thead>
+    <tbody>
+    <% progress.forEach(function (w) { %>
+      <tr>
+        <td><%= w.ward_name %></td>
+        <td class="num"><%= weight(w.target_g, unit).value %></td>
+        <td class="num"><%= weight(w.delivered_g, unit).value %></td>
+        <td class="num"><%= weight(w.outsourced_g, unit).value %></td>
+        <td class="num"><strong><%= weight(w.totalG, unit).value %></strong></td>
+        <td class="num">
+          <%= w.target_g ? fromBp(w.achievedBp) + '%' : '—' %>
+          <% if (w.target_g) { %>
+            <div class="bar <%= cls(w.achievedBp) %>"><span style="width:<%= Math.min(100, w.achievedBp / 100).toFixed(1) %>%"></span></div>
+          <% } %>
+        </td>
+        <td class="num"><%= w.shortfallG ? weight(w.shortfallG, unit).value : '—' %></td>
+      </tr>
+    <% }); %>
+    </tbody>
+    <tr class="total">
+      <td>TOTAL</td>
+      <td class="num"><%= weight(totalTargetG, unit).value %></td>
+      <td class="num"><%= weight(progress.reduce(function (s, w) { return s + w.delivered_g; }, 0), unit).value %></td>
+      <td class="num"><%= weight(progress.reduce(function (s, w) { return s + w.outsourced_g; }, 0), unit).value %></td>
+      <td class="num"><%= weight(totalDoneG, unit).value %></td>
+      <td class="num"></td><td class="num"></td>
+    </tr>
+  </table>
+  <p class="small muted" style="margin:0.6rem 0 0">All figures in <%= unit === 't' ? 'tonnes' : 'kilograms' %>.</p>
+</div>
+
+<% if (canEdit) { %>
+  <h2>Set the targets</h2>
+  <div class="split">
+    <div class="card">
+      <h3>Company target</h3>
+      <form method="post" action="/targets/season" class="grid">
+        <div>
+          <label for="target_kg">Season target (kg)</label>
+          <input id="target_kg" name="target_kg" class="num" required
+                 value="<%= fromGrams(season.target_g) %>">
+        </div>
+        <div class="actions"><button type="submit">Save</button></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>Per-ward targets</h3>
+      <p class="small muted" style="margin-top:0">
+        A field officer sees only their own ward's number. Leave a box blank to
+        leave that ward unchanged.
+      </p>
+      <form method="post" action="/targets/ward" class="grid">
+        <% progress.forEach(function (w) { %>
+          <div>
+            <label for="t<%= w.ward_id %>"><%= w.ward_name %> (kg)</label>
+            <input id="t<%= w.ward_id %>" name="target_<%= w.ward_id %>" class="num"
+                   value="<%= w.target_g ? fromGrams(w.target_g) : '' %>">
+          </div>
+        <% }); %>
+        <div class="actions"><button type="submit">Save ward targets</button></div>
+      </form>
+    </div>
+  </div>
+
+  <h2>Seasons</h2>
+  <div class="card scroll">
+    <table>
+      <thead><tr><th>Code</th><th>Name</th><th>From</th><th>To</th>
+        <th class="num">Target</th><th class="num">Delivered</th>
+        <th class="num">Contracts</th><th>Status</th></tr></thead>
+      <tbody>
+      <% seasons.forEach(function (s) { %>
+        <tr>
+          <td class="code"><a href="/season/<%= s.id %>?back=/targets"><%= s.code %></a></td>
+          <td><%= s.name %></td>
+          <td class="small"><%= s.starts_on %></td>
+          <td class="small"><%= s.ends_on %></td>
+          <td class="num"><%= weight(s.target_g, unit).value %></td>
+          <td class="num"><%= weight(s.delivered_g, unit).value %></td>
+          <td class="num"><%= s.contracts %></td>
+          <td><span class="pill <%= s.status === 'open' ? 'ok' : '' %>"><%= s.status %></span></td>
+        </tr>
+      <% }); %>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>Start a new season</h3>
+    <p class="small muted" style="margin-top:0">
+      Everything in this app is scoped to a season — farmers carry over, but
+      contracts, deliveries, credit and settlements all start clean.
+    </p>
+    <form method="post" action="/targets/seasons" class="grid">
+      <div><label for="code">Code</label><input id="code" name="code" required placeholder="S2027"></div>
+      <div><label for="name">Name</label><input id="name" name="name" required placeholder="Long rains 2027"></div>
+      <div><label for="starts_on">Starts</label><input id="starts_on" name="starts_on" type="date" required></div>
+      <div><label for="ends_on">Ends</label><input id="ends_on" name="ends_on" type="date" required></div>
+      <div><label for="ntarget">Target (kg)</label><input id="ntarget" name="target_kg" class="num" placeholder="30000"></div>
+      <div class="actions"><button type="submit">Create season</button></div>
+    </form>
+  </div>
+<% } else { %>
+  <div class="card">
+    <p class="muted" style="margin:0">
+      Only the owner can change targets. You are seeing them as
+      <%= user.role.replace('_', ' ') %>.
+    </p>
+  </div>
+<% } %>
+<%- include('partials/foot') %>

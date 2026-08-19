@@ -1,0 +1,69 @@
+<%- include('partials/head') %>
+<h1>Suppliers</h1>
+<p class="sub">
+  Farmers we buy from without a contract. No seed on credit, no debt to recover —
+  we agree a price, we pay, we carry it home.
+</p>
+
+<% if (flash) { %><div class="flash err"><%= flash %></div><% } %>
+<% if (ok) { %><div class="flash ok"><%= ok %></div><% } %>
+
+<form class="filters" method="get" action="/outsourcing/suppliers">
+  <div><label for="q">Search</label>
+    <input id="q" name="q" value="<%= q %>" placeholder="name, code or phone"></div>
+  <button type="submit">Search</button>
+  <a class="btn ghost" href="/leads">Referrals to call</a>
+</form>
+
+<div class="card scroll">
+  <table>
+    <thead><tr><th>Code</th><th>Name</th><th>Phone</th><th>Area</th><th>Ward</th>
+      <th class="num">Loads</th><th class="num">Supplied</th><th class="num">Paid</th><th>Notes</th></tr></thead>
+    <tbody>
+    <% if (suppliers.length === 0) { %>
+      <tr><td colspan="9" class="empty">No suppliers yet. Add one below, or convert a referral.</td></tr>
+    <% } %>
+    <% suppliers.forEach(function (s) { %>
+      <tr>
+        <td class="code"><%= s.code %></td>
+        <td><%= s.name %></td>
+        <td class="mono small"><%= s.phone %></td>
+        <td class="small"><%= s.area %></td>
+        <td><%= s.ward_name || '—' %></td>
+        <td class="num"><%= s.loads %></td>
+        <td class="num"><%= weight(s.supplied_g, unit).value %></td>
+        <td class="num"><%= money(s.paid_cents) %></td>
+        <td class="notes"><%= s.notes %></td>
+      </tr>
+    <% }); %>
+    </tbody>
+    <% if (suppliers.length) { %>
+      <tfoot><tr class="total">
+        <td colspan="5">TOTAL</td>
+        <td class="num"><%= suppliers.reduce(function (a, s) { return a + s.loads; }, 0) %></td>
+        <td class="num"><%= weight(suppliers.reduce(function (a, s) { return a + s.supplied_g; }, 0), unit).value %></td>
+        <td class="num"><%= money(suppliers.reduce(function (a, s) { return a + s.paid_cents; }, 0)) %></td>
+        <td></td>
+      </tr></tfoot>
+    <% } %>
+  </table>
+</div>
+
+<h2>Add a supplier</h2>
+<div class="card">
+  <form method="post" action="/outsourcing/suppliers" class="grid">
+    <div><label for="name">Name</label><input id="name" name="name" required></div>
+    <div><label for="phone">Phone</label><input id="phone" name="phone" placeholder="2547…"></div>
+    <div><label for="mm_name">Mobile money name</label>
+      <input id="mm_name" name="mm_name" placeholder="if different from their name"></div>
+    <div><label for="area">Area</label><input id="area" name="area"></div>
+    <div><label for="ward_id">Ward</label>
+      <select id="ward_id" name="ward_id">
+        <option value="">Not known</option>
+        <% wards.forEach(function (w) { %><option value="<%= w.id %>"><%= w.name %></option><% }); %>
+      </select></div>
+    <div style="grid-column:1/-1"><label for="notes">Notes</label><input id="notes" name="notes"></div>
+    <div class="actions"><button type="submit">Add supplier</button></div>
+  </form>
+</div>
+<%- include('partials/foot') %>

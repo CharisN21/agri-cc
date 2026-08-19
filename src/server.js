@@ -4,6 +4,7 @@ import express from 'express';
 import { config, ROOT } from './config.js';
 import { migrate } from './db.js';
 import { attachUser } from './auth.js';
+import { attachContext, weight } from './context.js';
 import { money, kg, pct, fromBp, fromCents, fromGrams } from './domain/units.js';
 import mountRoutes from './routes/index.js';
 import { isMain } from './is-main.js';
@@ -25,12 +26,16 @@ export function createApp() {
   app.locals.fromCents = fromCents;
   app.locals.fromGrams = fromGrams;
   app.locals.tonnes = (g) => (g / 1_000_000).toFixed(3);
+  // Weight in whichever unit this viewer chose. Storage is always grams; only
+  // the reading changes.
+  app.locals.weight = weight;
   app.locals.brand = config.brand;
   // The login page only advertises the documented demo passwords when they are
   // actually in force. A deployment that sets SEED_PASSWORD must not print it.
   app.locals.showDemoHints = !config.seedPassword;
 
   app.use(attachUser);
+  app.use(attachContext);
   mountRoutes(app);
 
   // eslint-disable-next-line no-unused-vars

@@ -45,7 +45,32 @@
         </tbody>
       </table>
     </div>
-    <p class="small"><a href="<%= d.tonnage.drill %>">Every delivery →</a></p>
+    <% if (targets && targets.some(function (t) { return t.target_g > 0; })) { %>
+      <h3 style="margin-top:1rem">Against the owner's ward targets</h3>
+      <table>
+        <thead><tr><th>Ward</th><th class="num">Target</th><th class="num">Total in</th><th class="num">Achieved</th></tr></thead>
+        <tbody>
+        <% targets.forEach(function (t) { %>
+          <tr>
+            <td><%= t.ward_name %></td>
+            <td class="num"><%= t.target_g ? weight(t.target_g, unit).value : '—' %></td>
+            <td class="num"><%= weight(t.totalG, unit).value %></td>
+            <td class="num">
+              <%= t.target_g ? fromBp(t.achievedBp) + '%' : '—' %>
+              <% if (t.target_g) { %>
+                <div class="bar <%= barClass(t.achievedBp) %>"><span style="width:<%= w(t.achievedBp) %>"></span></div>
+              <% } %>
+            </td>
+          </tr>
+        <% }); %>
+        </tbody>
+      </table>
+      <p class="small muted" style="margin:0.4rem 0 0">
+        Includes outsourced grain. A field officer sees only their own ward.
+      </p>
+    <% } %>
+    <p class="small"><a href="<%= d.tonnage.drill %>">Every delivery →</a> ·
+      <a href="/targets">Targets →</a></p>
   </section>
 
   <!-- 2 -->
@@ -96,7 +121,34 @@
         </div>
       <% }); %>
     </div>
-    <p class="small"><a href="<%= d.money.drill %>">Every settlement →</a></p>
+    <% if (outsourcing && outsourcing.loads > 0) { %>
+      <h3 style="margin-top:1rem">Contracted vs outsourced</h3>
+      <table>
+        <thead><tr><th>Source</th><th class="num">Tonnage</th><th class="num">Landed / t</th><th class="num">Difference</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Contracted farmers</td>
+            <td class="num"><%= weight(d.money.payableG, unit).value %></td>
+            <td class="num"><%= money(d.money.landedPerTonneCents) %></td>
+            <td class="num muted">baseline</td>
+          </tr>
+          <tr>
+            <td>Outsourced <span class="muted small">(incl. transport, labour, food, housing)</span></td>
+            <td class="num"><%= weight(outsourcing.payable_g, unit).value %></td>
+            <td class="num"><%= money(outsourcing.landedPerTonneCents) %></td>
+            <td class="num <%= outsourcing.landedPerTonneCents <= d.money.landedPerTonneCents ? 'badge-pos' : 'badge-neg' %>">
+              <%= outsourcing.landedPerTonneCents <= d.money.landedPerTonneCents ? '−' : '+' %><%= money(Math.abs(outsourcing.landedPerTonneCents - d.money.landedPerTonneCents)) %>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="small muted" style="margin:0.4rem 0 0">
+        Of the outsourced cost, <%= money(outsourcing.overheadPerTonneCents) %> a tonne
+        is the trip itself, not the grain. That is the figure a grain price alone hides.
+      </p>
+    <% } %>
+    <p class="small"><a href="<%= d.money.drill %>">Every settlement →</a> ·
+      <a href="/outsourcing">Supply runs →</a></p>
   </section>
 
   <!-- 3 -->
