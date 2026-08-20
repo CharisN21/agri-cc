@@ -2,332 +2,572 @@
 <%
   var open = run.status === 'Open';
   var c = costing;
+  var tp = planning.target;
+  var bp = planning.budget;
+  var rk = planning.ranking;
+  var live = purchases.filter(function (p) { return !p.voided_at; });
+  // Which step is the officer actually on? The page leads him to it.
+  var step = !run.area ? 1
+           : bp.projectedCents === 0 ? 2
+           : planning.offers.length === 0 ? 3
+           : (planning.acceptedUnbought.length > 0 || live.length === 0) ? 4
+           : 5;
 %>
 <h1><%= run.code %> <span class="pill <%= open ? 'Pending' : 'Paid' %>"><%= run.status %></span></h1>
 <p class="sub">
-  <%= run.area || 'no area recorded' %> · started <%= run.started_on %>
+  <%= run.area || 'no area recorded yet' %> · started <%= run.started_on %>
   <% if (run.ended_on) { %>· closed <%= run.ended_on %><% } %>
   <% if (run.officer_name) { %>· <%= run.officer_name %><% } %>
-  <% if (run.vehicle_reg) { %>· <%= run.vehicle_reg %><% } %>
 </p>
 
 <% if (flash) { %><div class="flash err"><%= flash %></div><% } %>
 <% if (ok) { %><div class="flash ok"><%= ok %></div><% } %>
 
-<!-- ---------------------------------------------------- the answer -->
-<div class="tiles">
-  <div class="tile">
-    <div class="label">Collected</div>
-    <div class="value"><%= weight(c.payableG, unit).value %> <%= weight(c.payableG, unit).suffix %></div>
-    <div class="target"><%= c.loads %> load(s)</div>
-  </div>
-  <div class="tile">
-    <div class="label">Grain / tonne</div>
-    <div class="value"><%= money(c.grainPerTonneCents) %></div>
-    <div class="target">paid to suppliers</div>
-  </div>
-  <div class="tile">
-    <div class="label">Trip cost / tonne</div>
-    <div class="value"><%= money(c.overheadPerTonneCents) %></div>
-    <div class="target"><%= fromBp(c.overheadBp) %>% on top of the grain</div>
-  </div>
-  <div class="tile">
-    <div class="label">True landed / tonne</div>
-    <div class="value"><%= money(c.landedPerTonneCents) %></div>
-    <div class="target">what it really cost</div>
-  </div>
-  <% if (comparison) { %>
-    <div class="tile">
-      <div class="label">vs contracted grain</div>
-      <div class="value <%= comparison.differenceCents >= 0 ? 'badge-pos' : 'badge-neg' %>">
-        <%= comparison.differenceCents >= 0 ? '+' : '−' %><%= money(Math.abs(comparison.differenceCents)) %>
-      </div>
-      <div class="target">
-        <%= comparison.differenceCents >= 0 ? 'cheaper' : 'dearer' %> than buying
-        <%= weight(c.payableG, unit).value %> <%= weight(c.payableG, unit).suffix %> at
-        KES <%= money(contractedPerTonneCents) %>/tonne
-      </div>
-    </div>
-  <% } %>
-</div>
-
-<% if (c.loads > 0 && comparison) { %>
-  <div class="card" style="margin-top:1rem">
-    <p style="margin:0" class="small">
-      <% if (comparison.differenceCents >= 0) { %>
-        <strong>This run was worth doing.</strong> Even after transport, labour, food
-        and allowances, the grain landed at KES <%= money(c.landedPerTonneCents) %> a tonne —
-        <%= money(Math.abs(comparison.differencePerTonneCents)) %> less per tonne than
-        contracted grain actually cost us this season.
-      <% } else { %>
-        <strong>This run cost more than contracted grain.</strong> It landed at
-        KES <%= money(c.landedPerTonneCents) %> a tonne against contracted grain at
-        KES <%= money(comparison.budgetPerTonneCents) %> a tonne — the trip costs, not the
-        price paid at the gate, are usually what does this.
-      <% } %>
-    </p>
-  </div>
-<% } %>
-
 <% if (open) { %>
-  <details class="card" <%= (!run.area || !run.vehicle_reg) ? 'open' : '' %>>
-    <summary style="cursor:pointer;font-weight:600;font-size:0.9rem">
-      Edit run details
-      <span class="muted small">— area, vehicle, date and notes, while this run is open</span>
-    </summary>
-    <form method="post" action="/outsourcing/runs/<%= run.id %>/update" class="grid" style="margin-top:0.8rem">
-      <div><label for="e_area">Area</label>
-        <input id="e_area" name="area" value="<%= run.area %>" required></div>
-      <div><label for="e_veh">Vehicle</label>
-        <input id="e_veh" name="vehicle_reg" value="<%= run.vehicle_reg %>"></div>
-      <div><label for="e_date">Date</label>
-        <input id="e_date" name="started_on" type="date" value="<%= run.started_on %>"></div>
-      <div style="grid-column:1/-1"><label for="e_notes">Notes</label>
-        <input id="e_notes" name="notes" value="<%= run.notes %>"></div>
-      <div class="actions"><button type="submit">Save details</button></div>
-    </form>
-  </details>
+  <ol class="steps">
+    <% ['Area', 'Estimated cost', 'Offers', 'Buy loads', 'Close'].forEach(function (label, i) { %>
+      <li class="<%= step === i + 1 ? 'on' : (step > i + 1 ? 'done' : '') %>">
+        <span class="n"><%= step > i + 1 ? '✓' : i + 1 %></span><%= label %>
+      </li>
+    <% }); %>
+  </ol>
 <% } %>
 
-<%- include("partials/run-planning") %>
-
-<div class="split">
-  <!-- ---------------------------------------------- what the trip cost -->
+<!-- ============================================================ 1. AREA -->
+<section class="step" id="area">
+  <h2><span class="step-n">1</span> Area and details</h2>
   <div class="card">
-    <h3>What the trip cost</h3>
-    <%- include('partials/working', { lines: c.lines }) %>
-
     <% if (open) { %>
-      <form method="post" action="/outsourcing/runs/<%= run.id %>/costs" class="grid" style="margin-top:0.8rem">
-        <div><label for="kind">Cost</label>
-          <select id="kind" name="kind" required>
-            <% Object.keys(costKinds).forEach(function (k) { %>
-              <option value="<%= k %>"><%= costKinds[k] %></option>
-            <% }); %>
-          </select></div>
-        <div><label for="amount">Amount (KES)</label>
-          <input id="amount" name="amount" class="num" required placeholder="8000.00"></div>
-        <div><label for="description">Description</label><input id="description" name="description"></div>
-        <div><label style="text-transform:none;letter-spacing:0">
-            <input type="checkbox" name="is_projected" style="width:auto"> Projected (budget)
-          </label></div>
-        <div class="actions"><button type="submit">Add cost</button></div>
+      <form method="post" action="/outsourcing/runs/<%= run.id %>/update" class="grid">
+        <div style="grid-column:span 2"><label for="e_area">Where is this trip going</label>
+          <input id="e_area" name="area" value="<%= run.area %>" required
+                 placeholder="Subukia market and the farms around it"></div>
+        <div><label for="e_veh">Vehicle</label>
+          <input id="e_veh" name="vehicle_reg" value="<%= run.vehicle_reg %>" placeholder="KAA 123B"></div>
+        <div><label for="e_date">Date</label>
+          <input id="e_date" name="started_on" type="date" value="<%= run.started_on %>"></div>
+        <div style="grid-column:1/-1"><label for="e_notes">Notes</label>
+          <input id="e_notes" name="notes" value="<%= run.notes %>"></div>
+        <div class="actions"><button type="submit" class="ghost">Save area details</button></div>
       </form>
-    <% } %>
-
-    <% if (costs.length) { %>
-      <table style="margin-top:0.7rem">
-        <thead><tr><th>Kind</th><th>Description</th><th>Date</th><th class="num">Amount</th></tr></thead>
-        <tbody>
-        <% costs.forEach(function (x) { %>
-          <tr>
-            <% if (open) { %>
-              <td colspan="4" style="padding:0.3rem 0.6rem">
-                <form method="post" action="/outsourcing/costs/<%= x.id %>/update"
-                      class="grid" style="grid-template-columns:1.3fr 1.6fr 0.9fr auto auto;gap:0.4rem">
-                  <input type="hidden" name="run_id" value="<%= run.id %>">
-                  <select name="kind" aria-label="Cost kind">
-                    <% Object.keys(costKinds).forEach(function (k) { %>
-                      <option value="<%= k %>" <%= x.kind === k ? 'selected' : '' %>><%= costKinds[k] %></option>
-                    <% }); %>
-                  </select>
-                  <input name="description" value="<%= x.description %>" placeholder="description" aria-label="Description">
-                  <input name="amount" class="num" value="<%= fromCents(x.amount_cents) %>" aria-label="Amount">
-                  <button type="submit" class="ghost" title="Save this line">Save</button>
-                  <button type="submit" class="ghost" title="Remove this line"
-                          formaction="/outsourcing/costs/<%= x.id %>/delete">✕</button>
-                </form>
-              </td>
-            <% } else { %>
-              <td class="small"><%= costKinds[x.kind] || x.kind %></td>
-              <td class="small muted"><%= x.description %></td>
-              <td class="small"><%= x.incurred_on %></td>
-              <td class="num"><%= money(x.amount_cents) %></td>
-            <% } %>
-          </tr>
-        <% }); %>
-        </tbody>
-        <tfoot><tr class="total"><td colspan="3">TOTAL</td>
-          <td class="num"><%= money(c.overheadCents) %></td></tr></tfoot>
-      </table>
-    <% } %>
-  </div>
-
-  <!-- ---------------------------------------------------- buy a load -->
-  <div class="card" id="quote">
-    <h3>Buy a load</h3>
-    <% if (!open) { %>
-      <p class="empty">This run is closed. Nothing more can be bought onto it.</p>
-    <% } else if (suppliers.length === 0) { %>
-      <p class="empty">No suppliers on file. <a href="/outsourcing/suppliers">Add one</a> first.</p>
+      <form method="post" action="/outsourcing/runs/<%= run.id %>/target" class="grid" style="margin-top:0.6rem">
+        <div><label for="tg">Tonnage wanted from this area (kg)</label>
+          <input id="tg" name="target_kg" class="num"
+                 value="<%= run.target_g ? fromGrams(run.target_g) : '' %>" placeholder="2000"></div>
+        <div class="actions"><button type="submit" class="ghost">Set target</button></div>
+      </form>
     <% } else { %>
+      <dl class="kv">
+        <dt>Area</dt><dd><%= run.area %></dd>
+        <dt>Vehicle</dt><dd><%= run.vehicle_reg || '—' %></dd>
+        <dt>Date</dt><dd><%= run.started_on %></dd>
+        <% if (run.notes) { %><dt>Notes</dt><dd><%= run.notes %></dd><% } %>
+      </dl>
+    <% } %>
 
-      <% if (quote) { %>
-        <div class="quote">
-          <% if (quote.rejected) { %>
-            <strong>This load grades REJECT.</strong>
-            Too wet or too dirty to buy. Recording it still costs nothing and
-            keeps the trip honest.
-          <% } else { %>
-            <div class="working">
-              <% quote.priced.lines.forEach(function (l) { %>
-                <div class="row <%= l.total ? 'total' : '' %> <%= l.note ? 'note' : '' %>">
-                  <span class="lbl"><%= l.label %></span>
-                  <span class="val <%= l.value < 0 ? 'neg' : '' %>">
-                    <% if (l.kind === 'weight') { %><%= kg(Math.abs(l.value)) %> kg
-                    <% } else { %><%= l.value < 0 ? '−' : '' %>KES <%= money(Math.abs(l.value)) %><% } %>
-                  </span>
-                </div>
-              <% }); %>
-            </div>
-            <p class="small" style="margin:0.6rem 0 0">
-              Grade <strong><%= quote.grade %></strong>.
-              <% if (quote.priced.priceBasis === 'negotiated') { %>
-                You are agreeing KES <%= money(quote.priced.agreedPriceCents) %>/kg against a
-                graded value of KES <%= money(quote.priced.referencePriceCents) %>/kg —
-                a difference of
-                <strong class="<%= quote.priced.varianceCents >= 0 ? 'badge-neg' : 'badge-pos' %>">
-                  <%= quote.priced.varianceCents >= 0 ? '+' : '−' %>KES <%= money(Math.abs(quote.priced.varianceValueCents)) %>
-                </strong>
-                on this load. You must say why below.
-              <% } else { %>
-                Priced straight off the spot schedule.
-              <% } %>
-            </p>
-          <% } %>
-        </div>
-      <% } %>
-
-      <form method="post" action="/outsourcing/runs/<%= run.id %>/buy" class="grid">
-        <div style="grid-column:span 2"><label for="supplier_id">Supplier</label>
-          <select id="supplier_id" name="supplier_id" required>
-            <% suppliers.forEach(function (s) { %>
-              <option value="<%= s.id %>" <%= q.supplier_id === String(s.id) ? 'selected' : '' %>>
-                <%= s.code %> — <%= s.name %><%= s.area ? ' (' + s.area + ')' : '' %>
-              </option>
-            <% }); %>
-          </select></div>
-        <div><label for="gross_kg">Gross (kg)</label>
-          <input id="gross_kg" name="gross_kg" class="num" required value="<%= q.gross_kg %>" placeholder="480.000"></div>
-        <div><label for="tare_kg">Tare (kg)</label>
-          <input id="tare_kg" name="tare_kg" class="num" required value="<%= q.tare_kg %>" placeholder="12.000"></div>
-        <div><label for="moisture">Moisture %</label>
-          <input id="moisture" name="moisture" class="num" required value="<%= q.moisture %>" placeholder="10.50"></div>
-        <div><label for="oil">Oil %</label>
-          <input id="oil" name="oil" class="num" required value="<%= q.oil %>" placeholder="41.00"></div>
-        <div><label for="foreign">Foreign %</label>
-          <input id="foreign" name="foreign" class="num" required value="<%= q.foreign %>" placeholder="3.00"></div>
-        <div><label for="damage">Damage %</label>
-          <input id="damage" name="damage" class="num" required value="<%= q.damage %>" placeholder="4.00"></div>
-        <div><label for="agreed">Agreed price (KES/kg)</label>
-          <input id="agreed" name="agreed" class="num" value="<%= q.agreed %>" placeholder="leave blank for schedule"></div>
-        <div style="grid-column:span 2"><label for="price_reason">Why the agreed price differs</label>
-          <input id="price_reason" name="price_reason" placeholder="required only if you override the schedule"></div>
-        <div><label for="reference">Payment reference</label><input id="reference" name="reference" placeholder="M-Pesa code"></div>
-        <div style="grid-column:1/-1"><label for="notes">Notes</label><input id="notes" name="notes"></div>
-        <div class="actions">
-          <button type="submit" formaction="/outsourcing/runs/<%= run.id %>/quote" class="ghost">Price it first</button>
-          <button type="submit">Buy this load</button>
-        </div>
-      </form>
-      <p class="small muted" style="margin-bottom:0">
-        Grading uses exactly the same rules as contracted grain. A negotiated
-        price is allowed, but it must record a reason — the database refuses it
-        otherwise.
+    <% if (tp.targetG > 0) { %>
+      <div class="working" style="margin-top:0.9rem">
+        <div class="row"><span class="lbl">Wanted from this area</span>
+          <span class="val"><%= weight(tp.targetG, unit).value %> <%= weight(tp.targetG, unit).suffix %></span></div>
+        <div class="row"><span class="lbl">Bought so far</span>
+          <span class="val"><%= weight(tp.boughtG, unit).value %> <%= weight(tp.boughtG, unit).suffix %></span></div>
+        <div class="row"><span class="lbl">Still offered, not yet bought</span>
+          <span class="val"><%= weight(tp.offeredG, unit).value %> <%= weight(tp.offeredG, unit).suffix %></span></div>
+        <div class="row total"><span class="lbl"><%= tp.met ? 'Target met' : 'Still needed' %></span>
+          <span class="val"><%= weight(tp.remainingG, unit).value %> <%= weight(tp.remainingG, unit).suffix %></span></div>
+      </div>
+      <div class="bar <%= tp.achievedBp >= 10000 ? 'high' : tp.achievedBp >= 5000 ? 'mid' : 'low' %>">
+        <span style="width:<%= Math.min(100, tp.achievedBp / 100).toFixed(1) %>%"></span>
+      </div>
+      <p class="small muted" style="margin:0.4rem 0 0">
+        <%= fromBp(tp.achievedBp) %>% of this area's target.
+        <% if (!tp.met && tp.shortfallAfterOffersG > 0) { %>
+          Even taking every offer you would still be
+          <strong><%= weight(tp.shortfallAfterOffersG, unit).value %> <%= weight(tp.shortfallAfterOffersG, unit).suffix %></strong>
+          short — find more farms.
+        <% } else if (!tp.met) { %>
+          The offers on the table can close the gap.
+        <% } %>
       </p>
     <% } %>
   </div>
-</div>
+</section>
 
-<!-- ---------------------------------------------------------- loads -->
-<h2>Loads on this run</h2>
-<div class="card scroll">
-  <table>
-    <thead><tr><th>Code</th><th>Supplier</th><th>Grade</th>
-      <th class="num">Net</th><th class="num">Payable</th>
-      <th class="num">Graded at</th><th class="num">Agreed</th><th class="num">Variance</th>
-      <th class="num">Paid</th><th class="num">Trip share</th><th class="num">Landed / t</th>
-      <th>Status</th><th>Why</th><th></th></tr></thead>
-    <tbody>
-    <% if (purchases.length === 0) { %>
-      <tr><td colspan="14" class="empty">Nothing bought on this run yet.</td></tr>
-    <% } %>
-    <% purchases.forEach(function (p, i) {
-         var per = c.perLoad.find(function (x) { return x.id === p.id; }); %>
-      <tr <%= p.voided_at ? 'style="opacity:0.45;text-decoration:line-through"' : '' %>>
-        <td class="code"><%= p.code %></td>
-        <td><%= p.supplier_name %></td>
-        <td><span class="pill <%= p.grade %>"><%= p.grade %></span></td>
-        <td class="num"><%= weight(p.net_g, unit).value %></td>
-        <td class="num"><%= weight(p.payable_g, unit).value %></td>
-        <td class="num"><%= p.status === 'Rejected' ? '—' : money(p.reference_price_cents) %></td>
-        <td class="num"><%= p.status === 'Rejected' ? '—' : money(p.agreed_price_cents) %></td>
-        <td class="num <%= p.agreed_price_cents > p.reference_price_cents ? 'badge-neg' : p.agreed_price_cents < p.reference_price_cents ? 'badge-pos' : '' %>">
-          <% if (p.status === 'Rejected') { %>—
-          <% } else if (p.agreed_price_cents === p.reference_price_cents) { %>—
-          <% } else { %><%= p.agreed_price_cents > p.reference_price_cents ? '+' : '−' %><%= money(Math.abs(p.agreed_price_cents - p.reference_price_cents)) %><% } %>
-        </td>
-        <td class="num"><%= money(p.net_payable_cents) %></td>
-        <td class="num"><%= per ? money(per.allocatedCostCents) : '—' %></td>
-        <td class="num"><%= per && per.landedPerTonneCents ? money(per.landedPerTonneCents) : '—' %></td>
-        <td><span class="pill <%= p.status %>"><%= p.status %></span></td>
-        <td class="notes"><%= p.price_reason %></td>
-        <td>
-          <% if (p.voided_at) { %>
-            <span class="pill bad">Voided</span>
-          <% } else { %>
-            <% if (p.status === 'Unpaid') { %>
-              <form method="post" action="/outsourcing/purchases/<%= p.id %>/pay" style="margin-bottom:0.3rem">
-                <input type="hidden" name="back" value="/outsourcing/runs/<%= run.id %>">
-                <input type="hidden" name="reference" value="<%= p.reference %>">
-                <button type="submit">Mark paid</button>
-              </form>
+<!-- ================================================ 2. ESTIMATED COST -->
+<section class="step" id="cost">
+  <h2><span class="step-n">2</span> What this trip will cost</h2>
+  <p class="sub">
+    Estimate before you buy. This figure is fixed however much grain you come
+    back with, which is what decides whose offer is really the cheapest.
+  </p>
+
+  <div class="card">
+    <div class="split" style="align-items:start">
+      <div>
+        <% if (bp.projectedCents > 0 || bp.actualCents > 0) { %>
+          <div class="working">
+            <div class="row"><span class="lbl">Estimated at the start</span>
+              <span class="val">KES <%= money(bp.projectedCents) %></span></div>
+            <% if (bp.approvedSupplementaryCents > 0) { %>
+              <div class="row"><span class="lbl">Supplementary approved</span>
+                <span class="val">KES <%= money(bp.approvedSupplementaryCents) %></span></div>
             <% } %>
-            <% if (open && p.status !== 'Paid') { %>
+            <div class="row"><span class="lbl">Actually spent so far</span>
+              <span class="val">KES <%= money(bp.actualCents) %></span></div>
+            <div class="row total">
+              <span class="lbl"><%= bp.state === 'over' ? 'Over by' : bp.state === 'under' ? 'Under by' : 'On budget' %></span>
+              <span class="val <%= bp.state === 'over' ? 'neg' : '' %>">KES <%= money(bp.state === 'over' ? bp.overBy : bp.savedBy) %></span>
+            </div>
+          </div>
+        <% } else { %>
+          <p class="empty" style="text-align:left">
+            Nothing estimated yet. Add the costs you expect — vehicle, fuel,
+            loaders, your own food and lodging.
+          </p>
+        <% } %>
+
+        <% if (open) { %>
+          <form method="post" action="/outsourcing/runs/<%= run.id %>/costs" class="grid" style="margin-top:0.8rem">
+            <div><label for="ck">Cost</label>
+              <select id="ck" name="kind" required>
+                <% Object.keys(costKinds).forEach(function (k) { %>
+                  <option value="<%= k %>"><%= costKinds[k] %></option>
+                <% }); %>
+              </select></div>
+            <div><label for="ca">Amount (KES)</label>
+              <input id="ca" name="amount" class="num" required placeholder="8000.00"></div>
+            <div><label for="cd">Description</label><input id="cd" name="description"></div>
+            <div><label for="cp" style="text-transform:none;letter-spacing:0">
+                <input type="checkbox" id="cp" name="is_projected" style="width:auto" checked>
+                Estimate (not yet spent)
+              </label></div>
+            <div class="actions"><button type="submit">Add cost</button></div>
+          </form>
+          <p class="small muted" style="margin-bottom:0">
+            Leave the box ticked while planning. Untick it to record money
+            actually spent on the road.
+          </p>
+        <% } %>
+      </div>
+
+      <div id="money">
+        <h3>Cost lines</h3>
+        <% if (budgetLines.length) { %>
+          <table>
+            <thead><tr><th>Estimated</th><th class="num">Amount</th></tr></thead>
+            <tbody>
+            <% budgetLines.forEach(function (x) { %>
+              <tr><td class="small"><%= costKinds[x.kind] || x.kind %>
+                  <span class="muted"><%= x.description %></span></td>
+                <td class="num"><%= money(x.amount_cents) %></td></tr>
+            <% }); %>
+            </tbody>
+            <tfoot><tr class="total"><td>Estimated total</td>
+              <td class="num"><%= money(bp.projectedCents) %></td></tr></tfoot>
+          </table>
+        <% } %>
+
+        <% if (costs.length) { %>
+          <table style="margin-top:0.8rem">
+            <thead><tr><th>Actually spent</th><th class="num">Amount</th><th></th></tr></thead>
+            <tbody>
+            <% costs.forEach(function (x) { %>
+              <tr>
+                <% if (open) { %>
+                  <td colspan="3" style="padding:0.3rem 0.6rem">
+                    <form method="post" action="/outsourcing/costs/<%= x.id %>/update"
+                          class="grid" style="grid-template-columns:1.2fr 1.4fr 0.9fr auto auto;gap:0.35rem">
+                      <input type="hidden" name="run_id" value="<%= run.id %>">
+                      <select name="kind" aria-label="Kind">
+                        <% Object.keys(costKinds).forEach(function (k) { %>
+                          <option value="<%= k %>" <%= x.kind === k ? 'selected' : '' %>><%= costKinds[k] %></option>
+                        <% }); %>
+                      </select>
+                      <input name="description" value="<%= x.description %>" aria-label="Description">
+                      <input name="amount" class="num" value="<%= fromCents(x.amount_cents) %>" aria-label="Amount">
+                      <button type="submit" class="ghost">Save</button>
+                      <button type="submit" class="ghost" formaction="/outsourcing/costs/<%= x.id %>/delete">✕</button>
+                    </form>
+                  </td>
+                <% } else { %>
+                  <td class="small"><%= costKinds[x.kind] || x.kind %>
+                    <span class="muted"><%= x.description %></span></td>
+                  <td class="num"><%= money(x.amount_cents) %></td><td></td>
+                <% } %>
+              </tr>
+            <% }); %>
+            </tbody>
+            <tfoot><tr class="total"><td>Spent total</td>
+              <td class="num"><%= money(bp.actualCents) %></td><td></td></tr></tfoot>
+          </table>
+        <% } %>
+      </div>
+    </div>
+
+    <%- include('partials/run-money-requests') %>
+  </div>
+</section>
+
+<!-- ============================================================ 3. OFFERS -->
+<section class="step" id="offers">
+  <h2><span class="step-n">3</span> Offers in this area</h2>
+  <p class="sub">
+    Record what each farm is asking. The trip costs the same whoever you buy
+    from, so the farm asking least per kilogram is not always the cheapest buy —
+    a small load carries the whole vehicle on its own.
+  </p>
+
+  <% if (rk.cheapestIsNotBest) { %>
+    <div class="quote">
+      <strong>Suggested pick: <%= rk.bestAlone.supplier_name %>.</strong><br>
+      <%= rk.cheapestPerKg.supplier_name %> asks least per kilogram
+      (KES <%= money(rk.cheapestPerKg.askingPriceCents) %>), but only
+      <%= weight(rk.cheapestPerKg.offeredG, unit).value %> <%= weight(rk.cheapestPerKg.offeredG, unit).suffix %> —
+      landing at <strong>KES <%= money(rk.cheapestPerKg.aloneLandedPerTonneCents) %> a tonne</strong>.
+      <%= rk.bestAlone.supplier_name %> asks KES <%= money(rk.bestAlone.askingPriceCents) %> for
+      <%= weight(rk.bestAlone.offeredG, unit).value %> <%= weight(rk.bestAlone.offeredG, unit).suffix %>,
+      landing at <strong>KES <%= money(rk.bestAlone.aloneLandedPerTonneCents) %> a tonne</strong>.
+    </div>
+  <% } else if (rk.bestAlone) { %>
+    <div class="quote">
+      <strong>Suggested pick: <%= rk.bestAlone.supplier_name %></strong> —
+      cheapest both per kilogram and once the trip cost is counted, at
+      KES <%= money(rk.bestAlone.aloneLandedPerTonneCents) %> a tonne.
+      <% if (rk.bestStop && rk.bestStop.id !== rk.bestAlone.id) { %>
+        Taking everything down to <%= rk.bestStop.supplier_name %> brings it to
+        KES <%= money(rk.bestStop.cumulativeLandedPerTonneCents) %> a tonne.
+      <% } %>
+    </div>
+  <% } %>
+
+  <div class="card scroll">
+    <table>
+      <thead><tr>
+        <th>Offer</th><th>Farm</th><th class="num">Quantity</th><th class="num">Asking / kg</th>
+        <th class="num">Landed / t alone</th><th class="num">With all above</th>
+        <th>Status</th><th></th>
+      </tr></thead>
+      <tbody>
+      <% if (planning.offers.length === 0) { %>
+        <tr><td colspan="8" class="empty">No offers yet. Record what each farm is asking below.</td></tr>
+      <% } %>
+      <% planning.offers.forEach(function (ofr) {
+           var rr = rk.offers.find(function (x) { return x.id === ofr.id; });
+           var isBest = rr && rk.bestAlone && rr.id === rk.bestAlone.id; %>
+        <tr <%= ofr.status === 'Declined' ? 'style="opacity:0.5"' : '' %>>
+          <td class="code"><%= ofr.code %></td>
+          <td><%= ofr.supplier_name %> <span class="muted small"><%= ofr.area %></span></td>
+          <td class="num"><%= weight(ofr.offered_g, unit).value %></td>
+          <td class="num"><%= money(ofr.asking_price_cents) %></td>
+          <td class="num <%= isBest ? 'badge-pos' : '' %>">
+            <%= rr ? money(rr.aloneLandedPerTonneCents) : '—' %>
+            <% if (isBest) { %><div class="small muted">best pick</div><% } %>
+          </td>
+          <td class="num <%= (rr && rk.bestStop && rr.id === rk.bestStop.id) ? 'badge-pos' : '' %>">
+            <%= rr ? money(rr.cumulativeLandedPerTonneCents) : '—' %>
+          </td>
+          <td>
+            <% if (ofr.purchase_id) { %>
+              <span class="pill Paid">Bought</span>
+              <div class="small mono"><%= ofr.purchase_code %></div>
+            <% } else { %>
+              <span class="pill <%= ofr.status === 'Accepted' ? 'Approved' : (ofr.status === 'Declined' ? 'bad' : 'Pending') %>"><%= ofr.status %></span>
+              <% if (ofr.decline_reason) { %><div class="small muted"><%= ofr.decline_reason %></div><% } %>
+            <% } %>
+          </td>
+          <td>
+            <% if (open && ofr.status === 'Open') { %>
+              <form method="post" action="/outsourcing/offers/<%= ofr.id %>/decide" style="margin-bottom:0.25rem">
+                <input type="hidden" name="run_id" value="<%= run.id %>">
+                <input type="hidden" name="status" value="Accepted">
+                <button type="submit">Accept</button>
+              </form>
               <details>
-                <summary class="small muted" style="cursor:pointer">Void</summary>
-                <form method="post" action="/outsourcing/purchases/<%= p.id %>/void" style="margin-top:0.3rem">
+                <summary class="small muted" style="cursor:pointer">Decline</summary>
+                <form method="post" action="/outsourcing/offers/<%= ofr.id %>/decide" style="margin-top:0.25rem">
                   <input type="hidden" name="run_id" value="<%= run.id %>">
-                  <input name="reason" required placeholder="why?" style="min-width:9rem">
+                  <input type="hidden" name="status" value="Declined">
+                  <input name="reason" required placeholder="why?" style="min-width:8rem">
                   <button type="submit" class="ghost">Confirm</button>
                 </form>
               </details>
+            <% } else if (open && ofr.status === 'Accepted' && !ofr.purchase_id) { %>
+              <a class="btn" href="#buy">Weigh &amp; buy ↓</a>
             <% } %>
-          <% } %>
-        </td>
-      </tr>
-    <% }); %>
-    </tbody>
-    <% if (purchases.length) { %>
-      <tfoot><tr class="total">
-        <td colspan="4">TOTAL</td>
-        <td class="num"><%= weight(c.payableG, unit).value %></td>
-        <td colspan="3"></td>
-        <td class="num"><%= money(c.purchaseCents) %></td>
-        <td class="num"><%= money(c.overheadCents) %></td>
-        <td colspan="4"></td>
-      </tr></tfoot>
-    <% } %>
-  </table>
-  <p class="small muted" style="margin:0.6rem 0 0">
-    "Trip share" spreads the run's costs across the loads by weight. The shares
-    always add back to exactly the trip total — no cent is lost or invented.
-  </p>
-</div>
-
-<div class="card">
-  <div class="actions">
-    <% if (open) { %>
-      <form method="post" action="/outsourcing/runs/<%= run.id %>/close">
-        <button type="submit">Close this run</button>
-      </form>
-      <span class="small muted">Closing stops any more loads being added.</span>
-    <% } else if (user.role === 'owner' || user.role === 'ops_manager') { %>
-      <form method="post" action="/outsourcing/runs/<%= run.id %>/reopen">
-        <button class="ghost" type="submit">Reopen</button>
-      </form>
-    <% } %>
-    <a class="btn ghost" href="/outsourcing">← All runs</a>
+          </td>
+        </tr>
+      <% }); %>
+      </tbody>
+    </table>
+    <p class="small muted" style="margin:0.6rem 0 0">
+      "Alone" charges the whole trip to that one offer. "With all above" assumes
+      you also take every cheaper offer — filling the vehicle is what brings the
+      cost down.
+    </p>
   </div>
-</div>
+
+  <% if (open) { %>
+    <div class="split">
+      <div class="card">
+        <h3>Record an offer</h3>
+        <form method="post" action="/outsourcing/runs/<%= run.id %>/offers" class="grid">
+          <div style="grid-column:span 2"><label for="of_sup">Farm</label>
+            <select id="of_sup" name="supplier_id" required>
+              <% suppliers.forEach(function (sp) { %>
+                <option value="<%= sp.id %>"><%= sp.code %> — <%= sp.name %><%= sp.area ? ' (' + sp.area + ')' : '' %></option>
+              <% }); %>
+            </select></div>
+          <div><label for="of_qty">Quantity (kg)</label>
+            <input id="of_qty" name="offered_kg" class="num" required placeholder="800"></div>
+          <div><label for="of_price">Asking (KES/kg)</label>
+            <input id="of_price" name="asking_price" class="num" required placeholder="52.00"></div>
+          <div><label for="of_m">Est. moisture %</label><input id="of_m" name="est_moisture" class="num" placeholder="optional"></div>
+          <div><label for="of_o">Est. oil %</label><input id="of_o" name="est_oil" class="num" placeholder="optional"></div>
+          <div style="grid-column:1/-1"><label for="of_n">Notes</label><input id="of_n" name="notes"></div>
+          <div class="actions"><button type="submit">Add offer</button></div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3>New farm</h3>
+        <p class="small muted" style="margin-top:0">
+          Met someone not on the list? Add them here and they become selectable
+          immediately — you do not have to leave this run.
+        </p>
+        <form method="post" action="/outsourcing/runs/<%= run.id %>/suppliers" class="grid">
+          <div><label for="ns_name">Name</label><input id="ns_name" name="name" required></div>
+          <div><label for="ns_phone">Phone</label><input id="ns_phone" name="phone" placeholder="2547…"></div>
+          <div><label for="ns_area">Area</label>
+            <input id="ns_area" name="area" value="<%= run.area %>"></div>
+          <div><label for="ns_mm">Mobile money name</label>
+            <input id="ns_mm" name="mm_name" placeholder="if different"></div>
+          <div><label for="ns_ward">Ward</label>
+            <select id="ns_ward" name="ward_id">
+              <option value="">Not known</option>
+              <% wards.forEach(function (w) { %><option value="<%= w.id %>"><%= w.name %></option><% }); %>
+            </select></div>
+          <div class="actions"><button type="submit" class="ghost">Add farm</button></div>
+        </form>
+      </div>
+    </div>
+  <% } %>
+</section>
+
+<!-- ========================================================= 4. BUY LOADS -->
+<section class="step" id="buy">
+  <h2><span class="step-n">4</span> Weigh and buy</h2>
+  <p class="sub">
+    Only an accepted offer can become a load. The weighbridge and the lab decide
+    the final price — the grade can disagree with what was quoted.
+  </p>
+
+  <% if (open) { %>
+    <% if (planning.acceptedUnbought.length === 0) { %>
+      <div class="card">
+        <p class="empty" style="margin:0">
+          <% if (planning.offers.length === 0) { %>
+            Record an offer above first, then accept it.
+          <% } else { %>
+            No accepted offers waiting. Accept one in step 3 to buy it.
+          <% } %>
+        </p>
+      </div>
+    <% } else { %>
+      <div class="card" id="quote">
+        <% if (quote) { %>
+          <div class="quote">
+            <% if (quote.rejected) { %>
+              <strong>This load grades REJECT.</strong> Too wet or too dirty to
+              buy. Recording it still costs nothing and keeps the trip honest.
+            <% } else { %>
+              <div class="working">
+                <% quote.priced.lines.forEach(function (l) { %>
+                  <div class="row <%= l.total ? 'total' : '' %> <%= l.note ? 'note' : '' %>">
+                    <span class="lbl"><%= l.label %></span>
+                    <span class="val <%= l.value < 0 ? 'neg' : '' %>">
+                      <% if (l.kind === 'weight') { %><%= kg(Math.abs(l.value)) %> kg
+                      <% } else { %><%= l.value < 0 ? '−' : '' %>KES <%= money(Math.abs(l.value)) %><% } %>
+                    </span>
+                  </div>
+                <% }); %>
+              </div>
+              <p class="small" style="margin:0.6rem 0 0">
+                Grade <strong><%= quote.grade %></strong>.
+                <% if (quote.priced.priceBasis === 'negotiated') { %>
+                  Agreeing KES <%= money(quote.priced.agreedPriceCents) %>/kg against a graded
+                  value of KES <%= money(quote.priced.referencePriceCents) %>/kg — a difference of
+                  <strong class="<%= quote.priced.varianceCents >= 0 ? 'badge-neg' : 'badge-pos' %>">
+                    <%= quote.priced.varianceCents >= 0 ? '+' : '−' %>KES <%= money(Math.abs(quote.priced.varianceValueCents)) %>
+                  </strong> on this load. Say why below.
+                <% } else { %>
+                  Priced straight off the spot schedule.
+                <% } %>
+              </p>
+            <% } %>
+          </div>
+        <% } %>
+
+        <form method="post" action="/outsourcing/runs/<%= run.id %>/buy" class="grid">
+          <div style="grid-column:span 2"><label for="b_offer">Accepted offer</label>
+            <select id="b_offer" name="offer_id" required>
+              <% planning.acceptedUnbought.forEach(function (ofr) { %>
+                <option value="<%= ofr.id %>" <%= q.offer_id === String(ofr.id) ? 'selected' : '' %>>
+                  <%= ofr.code %> — <%= ofr.supplier_name %>,
+                  <%= kg(ofr.offered_g) %> kg at KES <%= money(ofr.asking_price_cents) %>/kg
+                </option>
+              <% }); %>
+            </select></div>
+          <div><label for="gross_kg">Gross (kg)</label>
+            <input id="gross_kg" name="gross_kg" class="num" required value="<%= q.gross_kg %>" placeholder="480.000"></div>
+          <div><label for="tare_kg">Tare (kg)</label>
+            <input id="tare_kg" name="tare_kg" class="num" required value="<%= q.tare_kg %>" placeholder="12.000"></div>
+          <div><label for="moisture">Moisture %</label>
+            <input id="moisture" name="moisture" class="num" required value="<%= q.moisture %>" placeholder="10.50"></div>
+          <div><label for="oil">Oil %</label>
+            <input id="oil" name="oil" class="num" required value="<%= q.oil %>" placeholder="41.00"></div>
+          <div><label for="foreign">Foreign %</label>
+            <input id="foreign" name="foreign" class="num" required value="<%= q.foreign %>" placeholder="3.00"></div>
+          <div><label for="damage">Damage %</label>
+            <input id="damage" name="damage" class="num" required value="<%= q.damage %>" placeholder="4.00"></div>
+          <div><label for="agreed">Agreed price (KES/kg)</label>
+            <input id="agreed" name="agreed" class="num" value="<%= q.agreed %>" placeholder="blank = schedule"></div>
+          <div style="grid-column:span 2"><label for="price_reason">Why the agreed price differs</label>
+            <input id="price_reason" name="price_reason" placeholder="only if you override the schedule"></div>
+          <div><label for="reference">Payment reference</label>
+            <input id="reference" name="reference" placeholder="M-Pesa code"></div>
+          <div style="grid-column:1/-1"><label for="b_notes">Notes</label><input id="b_notes" name="notes"></div>
+          <div class="actions">
+            <button type="submit" formaction="/outsourcing/runs/<%= run.id %>/quote" class="ghost">Price it first</button>
+            <button type="submit">Buy this load</button>
+          </div>
+        </form>
+      </div>
+    <% } %>
+  <% } %>
+
+  <div class="card scroll">
+    <table>
+      <thead><tr><th>Load</th><th>From offer</th><th>Farm</th><th>Grade</th>
+        <th class="num">Net</th><th class="num">Payable</th>
+        <th class="num">Quoted</th><th class="num">Paid /kg</th>
+        <th class="num">Total</th><th class="num">Trip share</th>
+        <th>Status</th><th></th></tr></thead>
+      <tbody>
+      <% if (purchases.length === 0) { %>
+        <tr><td colspan="12" class="empty">Nothing bought on this run yet.</td></tr>
+      <% } %>
+      <% purchases.forEach(function (p) {
+           var per = c.perLoad.find(function (x) { return x.id === p.id; });
+           var ofr = planning.offers.find(function (o) { return o.purchase_id === p.id; }); %>
+        <tr <%= p.voided_at ? 'style="opacity:0.45;text-decoration:line-through"' : '' %>>
+          <td class="code"><%= p.code %></td>
+          <td class="code small"><%= ofr ? ofr.code : '—' %></td>
+          <td><%= p.supplier_name %></td>
+          <td><span class="pill <%= p.grade %>"><%= p.grade %></span></td>
+          <td class="num"><%= weight(p.net_g, unit).value %></td>
+          <td class="num"><%= weight(p.payable_g, unit).value %></td>
+          <td class="num small muted"><%= ofr ? money(ofr.asking_price_cents) : '—' %></td>
+          <td class="num"><%= p.status === 'Rejected' ? '—' : money(p.agreed_price_cents) %></td>
+          <td class="num"><%= money(p.net_payable_cents) %></td>
+          <td class="num"><%= per ? money(per.allocatedCostCents) : '—' %></td>
+          <td>
+            <span class="pill <%= p.voided_at ? 'bad' : p.status %>"><%= p.voided_at ? 'Voided' : p.status %></span>
+          </td>
+          <td>
+            <% if (!p.voided_at) { %>
+              <% if (p.status === 'Unpaid') { %>
+                <form method="post" action="/outsourcing/purchases/<%= p.id %>/pay" style="margin-bottom:0.25rem">
+                  <input type="hidden" name="back" value="/outsourcing/runs/<%= run.id %>">
+                  <input type="hidden" name="reference" value="<%= p.reference %>">
+                  <button type="submit">Mark paid</button>
+                </form>
+              <% } %>
+              <% if (open && p.status !== 'Paid') { %>
+                <details>
+                  <summary class="small muted" style="cursor:pointer">Void</summary>
+                  <form method="post" action="/outsourcing/purchases/<%= p.id %>/void" style="margin-top:0.25rem">
+                    <input type="hidden" name="run_id" value="<%= run.id %>">
+                    <input name="reason" required placeholder="why?" style="min-width:8rem">
+                    <button type="submit" class="ghost">Confirm</button>
+                  </form>
+                </details>
+              <% } %>
+            <% } %>
+          </td>
+        </tr>
+      <% }); %>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================================================= 5. CLOSE -->
+<section class="step" id="result">
+  <h2><span class="step-n">5</span> What this trip actually cost</h2>
+  <div class="tiles">
+    <div class="tile"><div class="label">Collected</div>
+      <div class="value"><%= weight(c.payableG, unit).value %> <%= weight(c.payableG, unit).suffix %></div>
+      <div class="target"><%= c.loads %> load(s)</div></div>
+    <div class="tile"><div class="label">Grain / tonne</div>
+      <div class="value"><%= money(c.grainPerTonneCents) %></div>
+      <div class="target">paid to farms</div></div>
+    <div class="tile"><div class="label">Trip cost / tonne</div>
+      <div class="value"><%= money(c.overheadPerTonneCents) %></div>
+      <div class="target"><%= fromBp(c.overheadBp) %>% on top of the grain</div></div>
+    <div class="tile"><div class="label">True landed / tonne</div>
+      <div class="value"><%= money(c.landedPerTonneCents) %></div>
+      <div class="target">what it really cost</div></div>
+    <% if (comparison) { %>
+      <div class="tile"><div class="label">vs contracted grain</div>
+        <div class="value <%= comparison.differenceCents >= 0 ? 'badge-pos' : 'badge-neg' %>">
+          <%= comparison.differenceCents >= 0 ? '+' : '−' %><%= money(Math.abs(comparison.differenceCents)) %>
+        </div>
+        <div class="target"><%= comparison.differenceCents >= 0 ? 'cheaper' : 'dearer' %> than contracted</div></div>
+    <% } %>
+  </div>
+
+  <% if (c.loads > 0 && comparison) { %>
+    <div class="card">
+      <p style="margin:0" class="small">
+        <% if (comparison.differenceCents >= 0) { %>
+          <strong>This run was worth doing.</strong> Even after transport, labour,
+          food and allowances the grain landed at KES <%= money(c.landedPerTonneCents) %> a
+          tonne — <%= money(Math.abs(comparison.differencePerTonneCents)) %> less per tonne
+          than contracted grain cost us this season.
+        <% } else { %>
+          <strong>This run cost more than contracted grain.</strong> It landed at
+          KES <%= money(c.landedPerTonneCents) %> a tonne against contracted grain at
+          KES <%= money(comparison.budgetPerTonneCents) %> — the trip costs, not the price
+          paid at the gate, are usually what does this.
+        <% } %>
+      </p>
+    </div>
+  <% } %>
+
+  <div class="card">
+    <%- include('partials/working', { lines: c.lines }) %>
+  </div>
+
+  <div class="card">
+    <div class="actions">
+      <% if (open) { %>
+        <form method="post" action="/outsourcing/runs/<%= run.id %>/close">
+          <button type="submit">Close this run</button>
+        </form>
+        <span class="small muted">
+          <% if (planning.acceptedUnbought.length) { %>
+            <%= planning.acceptedUnbought.length %> accepted offer(s) not yet bought.
+          <% } %>
+          Closing freezes the area, the costs and the loads.
+        </span>
+      <% } else if (user.role === 'owner' || user.role === 'ops_manager') { %>
+        <form method="post" action="/outsourcing/runs/<%= run.id %>/reopen">
+          <button class="ghost" type="submit">Reopen</button>
+        </form>
+        <span class="small muted">Reopen to correct anything on this run.</span>
+      <% } %>
+      <a class="btn ghost" href="/outsourcing">← All runs</a>
+    </div>
+  </div>
+</section>
 <%- include('partials/foot') %>

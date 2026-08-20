@@ -53,15 +53,23 @@
     </details>
   <% }); %>
 
-  <% if (openRuns && openRuns.length) { %>
+  <% if (navRuns && navRuns.length) { %>
     <details class="sec" open>
-      <summary>Open runs <span class="pill Pending" style="float:right;margin-top:-2px"><%= openRuns.length %></span></summary>
+      <summary>Supply runs
+        <% if (openRuns && openRuns.length) { %>
+          <span class="pill Pending" style="float:right;margin-top:-2px"><%= openRuns.length %> open</span>
+        <% } %>
+      </summary>
       <ul>
-        <% openRuns.forEach(function (r) { %>
+        <% navRuns.forEach(function (r) { %>
           <li><a href="/outsourcing/runs/<%= r.id %>"
                  class="<%= currentPath === '/outsourcing/runs/' + r.id ? 'on' : '' %>"
-                 title="<%= r.area %> — started <%= r.started_on %>">
-            <%= r.code %> <span class="muted small">· <%= r.loads %> load<%= r.loads === 1 ? '' : 's' %></span>
+                 title="<%= r.area %>">
+            <span class="runline">
+              <span class="dot <%= r.status === 'Open' ? 'open' : 'closed' %>"></span>
+              <span><%= r.code %></span>
+              <span class="meta"><%= (r.area || '').slice(0, 14) %></span>
+            </span>
           </a></li>
         <% }); %>
       </ul>

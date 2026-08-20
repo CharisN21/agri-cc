@@ -16,6 +16,7 @@ process.env.SESSION_SECRET = 'test-secret';
 
 const { migrate, getDb, closeDb } = await import('../src/db.js');
 const out = await import('../src/repo-outsourcing.js');
+const plan = await import('../src/repo-offers.js');
 const { hashPassword } = await import('../src/auth.js');
 
 migrate({ log: () => {} });
@@ -50,9 +51,15 @@ function newRun(area = 'Somewhere') {
   return out.createRun({ season_id: 1, area, vehicle_reg: 'KAA 1A',
                          started_on: '2026-07-10', notes: '' }, userId).id;
 }
+// A load now comes from an accepted offer, so the helper follows that flow.
 function buy(runId, { grossG = 500_000, tareG = 12_000, moistureBp = 950 } = {}) {
+  const offer = plan.addOffer({
+    run_id: runId, supplier_id: supplierId, offered_g: grossG - tareG,
+    asking_price_cents: 5200, offered_on: '2026-07-10', notes: '',
+  }, userId);
+  plan.decideOffer(offer.id, { status: 'Accepted' }, userId);
   return out.createSpotPurchase({
-    runId, supplierId, grossG, tareG,
+    runId, offerId: offer.id, supplierId, grossG, tareG,
     moistureBp, oilBp: 4100, foreignBp: 200, damageBp: 300,
     agreedPriceCents: null, priceReason: '',
     purchasedOn: '2026-07-10', purchasedAt: '2026-07-10T10:00:00Z',

@@ -1,0 +1,80 @@
+<%# Supplementary cost requests and declared savings, inside the cost step. %>
+<% var openRun = run.status === 'Open'; %>
+
+<% if (savings.availableCents > 0) { %>
+  <p class="small muted" style="margin:0.9rem 0 0">
+    Savings pot this season: <strong>KES <%= money(savings.availableCents) %></strong> available
+    (<%= money(savings.declaredCents) %> declared, <%= money(savings.drawnCents) %> drawn).
+  </p>
+<% } %>
+
+<% if (openRun) { %>
+  <details style="margin-top:0.8rem">
+    <summary style="cursor:pointer;font-weight:600;font-size:0.85rem">
+      Ask for more, or hand back what you saved
+      <span class="muted small">— the owner decides</span>
+    </summary>
+    <form method="post" action="/outsourcing/runs/<%= run.id %>/requests" class="grid" style="margin-top:0.7rem">
+      <div><label for="rq_dir">Which</label>
+        <select id="rq_dir" name="direction" required>
+          <option value="supplementary">Ask for more (cost I did not expect)</option>
+          <option value="saving">Declare a saving</option>
+        </select></div>
+      <div><label for="rq_kind">Cost</label>
+        <select id="rq_kind" name="kind" required>
+          <% Object.keys(costKinds).forEach(function (k) { %>
+            <option value="<%= k %>"><%= costKinds[k] %></option>
+          <% }); %>
+        </select></div>
+      <div><label for="rq_amt">Amount (KES)</label>
+        <input id="rq_amt" name="amount" class="num" required placeholder="3500.00"></div>
+      <div style="grid-column:1/-1"><label for="rq_why">Why</label>
+        <input id="rq_why" name="reason" required
+               placeholder="road washed out past Solai, had to hire a second vehicle"></div>
+      <div class="actions"><button type="submit">Send to the owner</button></div>
+    </form>
+    <p class="small muted" style="margin-bottom:0">
+      You cannot approve your own request. An approved supplementary is added to
+      this trip's cost straight away.
+    </p>
+  </details>
+<% } %>
+
+<% if (planning.requests.length) { %>
+  <div class="scroll">
+    <table style="margin-top:0.8rem">
+      <thead><tr><th>Ref</th><th></th><th class="num">Amount</th><th>Why</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      <% planning.requests.forEach(function (q) { %>
+        <tr>
+          <td class="code"><%= q.code %></td>
+          <td class="small"><%= q.direction === 'saving' ? 'Saving' : 'Extra' %>
+            <span class="muted">· <%= costKinds[q.kind] || q.kind %></span></td>
+          <td class="num"><%= money(q.amount_cents) %></td>
+          <td class="notes"><%= q.reason %></td>
+          <td>
+            <span class="pill <%= q.status === 'Approved' ? 'Paid' : (q.status === 'Declined' ? 'bad' : 'Pending') %>"><%= q.status %></span>
+            <% if (q.from_savings) { %><div class="small muted">from savings</div><% } %>
+          </td>
+          <td>
+            <% if (q.status === 'Requested' && canApproveCosts && q.requested_by !== user.id) { %>
+              <form method="post" action="/outsourcing/requests/<%= q.id %>/decide">
+                <input type="hidden" name="back" value="/outsourcing/runs/<%= run.id %>">
+                <% if (q.direction === 'supplementary' && savings.availableCents >= q.amount_cents) { %>
+                  <label class="small muted" style="text-transform:none;letter-spacing:0">
+                    <input type="checkbox" name="from_savings" style="width:auto"> from savings
+                  </label>
+                <% } %>
+                <button type="submit" name="status" value="Approved">Approve</button>
+                <button type="submit" class="ghost" name="status" value="Declined">Decline</button>
+              </form>
+            <% } else if (q.status === 'Requested') { %>
+              <span class="small muted">with the owner</span>
+            <% } %>
+          </td>
+        </tr>
+      <% }); %>
+      </tbody>
+    </table>
+  </div>
+<% } %>

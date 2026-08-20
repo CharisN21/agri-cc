@@ -78,10 +78,20 @@ export function updateOffer(offerId, fields, actorId) {
   });
 }
 
+export const getOffer = (id) =>
+  getDb().prepare(
+    `SELECT o.*, s.name AS supplier_name, s.code AS supplier_code
+       FROM run_offer o JOIN supplier s ON s.id = o.supplier_id WHERE o.id = ?`,
+  ).get(id);
+
 export const runOffers = (runId) =>
   getDb().prepare(
-    `SELECT o.*, s.name AS supplier_name, s.code AS supplier_code, s.phone, s.area
-       FROM run_offer o JOIN supplier s ON s.id = o.supplier_id
+    `SELECT o.*, s.name AS supplier_name, s.code AS supplier_code, s.phone, s.area,
+            p.id AS purchase_id, p.code AS purchase_code, p.status AS purchase_status,
+            p.voided_at AS purchase_voided_at
+       FROM run_offer o
+       JOIN supplier s ON s.id = o.supplier_id
+       LEFT JOIN spot_purchase p ON p.offer_id = o.id AND p.voided_at IS NULL
       WHERE o.run_id = ? ORDER BY o.asking_price_cents, o.id`,
   ).all(runId);
 
@@ -184,7 +194,9 @@ export function savingsPool(seasonId) {
 export function runPlanning(run, boughtG, actualCostCents, boughtCents = 0) {
   const db = getDb();
   const offers = runOffers(run.id);
-  const openOffers = offers.filter((o) => o.status === 'Open');
+  // Still a choice: recorded, not yet declined, not yet turned into a load.
+  const openOffers = offers.filter((o) => o.status === 'Open' && !o.purchase_id);
+  const acceptedUnbought = offers.filter((o) => o.status === 'Accepted' && !o.purchase_id);
 
   const projected = db.prepare(
     'SELECT COALESCE(SUM(amount_cents), 0) AS c FROM run_cost WHERE run_id = ? AND is_projected = 1',
@@ -200,6 +212,7 @@ export function runPlanning(run, boughtG, actualCostCents, boughtCents = 0) {
 
   return {
     offers,
+    acceptedUnbought,
     ranking: rankOffers(
       openOffers.map((o) => ({
         id: o.id, code: o.code, supplier_name: o.supplier_name,

@@ -254,7 +254,7 @@ export function previewSpotPurchase({
  * movement bringing the grain into the store.
  */
 export function createSpotPurchase({
-  runId, supplierId, grossG, tareG, moistureBp, oilBp, foreignBp, damageBp,
+  runId, offerId, supplierId, grossG, tareG, moistureBp, oilBp, foreignBp, damageBp,
   agreedPriceCents = null, priceReason = '', purchasedOn, purchasedAt,
   method = 'M-Pesa', reference = '', notes = '',
 }, actorId) {
@@ -277,11 +277,12 @@ export function createSpotPurchase({
            (code, run_id, supplier_id, season_id, spot_price_schedule_id, gross_g, tare_g,
             payable_g, reference_price_cents, agreed_price_cents, price_basis, price_reason,
             gross_value_cents, cess_cents, net_payable_cents, balance_cents, status,
-            purchased_on, purchased_at, method, reference, notes, created_by)
+            purchased_on, purchased_at, method, reference, notes, offer_id, created_by)
          VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 'schedule', '', 0, 0, 0, 0, 'Rejected',
-                 ?, ?, ?, ?, ?, ?)`,
+                 ?, ?, ?, ?, ?, ?, ?)`,
       ).run(code, runId, supplierId, run.season_id, p.schedule.id, grossG, tareG,
-            purchasedOn, purchasedAt, method, reference, notes, actorId ?? null);
+            purchasedOn, purchasedAt, method, reference, notes, offerId ?? null,
+            actorId ?? null);
       db.prepare(
         `INSERT INTO quality_test (code, spot_purchase_id, moisture_bp, oil_bp, foreign_bp,
                                    damage_bp, grade, tested_on, tested_at, notes, created_by)
@@ -302,13 +303,16 @@ export function createSpotPurchase({
          (code, run_id, supplier_id, season_id, spot_price_schedule_id, gross_g, tare_g,
           payable_g, reference_price_cents, agreed_price_cents, price_basis, price_reason,
           gross_value_cents, cess_cents, net_payable_cents, amount_paid_cents,
-          balance_cents, status, purchased_on, purchased_at, method, reference, notes, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'Unpaid', ?, ?, ?, ?, ?, ?)`,
+          balance_cents, status, purchased_on, purchased_at, method, reference, notes,
+          offer_id, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'Unpaid',
+               ?, ?, ?, ?, ?, ?, ?)`,
     ).run(code, runId, supplierId, run.season_id, p.schedule.id, grossG, tareG,
           priced.payableG, priced.referencePriceCents, priced.agreedPriceCents,
           priced.priceBasis, priceReason, priced.grossValueCents, priced.cessCents,
           priced.netPayableCents, priced.netPayableCents,
-          purchasedOn, purchasedAt, method, reference, notes, actorId ?? null);
+          purchasedOn, purchasedAt, method, reference, notes, offerId ?? null,
+          actorId ?? null);
 
     db.prepare(
       `INSERT INTO quality_test (code, spot_purchase_id, moisture_bp, oil_bp, foreign_bp,
@@ -531,3 +535,15 @@ export const openRuns = (seasonId) =>
       WHERE r.season_id = ? AND r.status = 'Open'
       ORDER BY r.started_on DESC, r.id DESC`,
   ).all(seasonId);
+
+/** Runs for the sidebar: every open one, then the most recent closed ones. */
+export const navRuns = (seasonId, closedLimit = 6) =>
+  getDb().prepare(
+    `SELECT id, code, area, status, started_on FROM supply_run
+      WHERE season_id = @season_id AND status = 'Open'
+      UNION ALL
+      SELECT id, code, area, status, started_on FROM (
+        SELECT id, code, area, status, started_on FROM supply_run
+         WHERE season_id = @season_id AND status <> 'Open'
+         ORDER BY started_on DESC, id DESC LIMIT @closed_limit)`,
+  ).all({ season_id: seasonId, closed_limit: closedLimit });

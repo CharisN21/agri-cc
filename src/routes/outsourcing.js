@@ -64,7 +64,7 @@ export default function mountOutsourcing(app) {
       gross_kg: req.query.gross_kg || '', tare_kg: req.query.tare_kg || '',
       moisture: req.query.moisture || '', oil: req.query.oil || '',
       foreign: req.query.foreign || '', damage: req.query.damage || '',
-      supplier_id: req.query.supplier_id || '', agreed: req.query.agreed || '',
+      offer_id: req.query.offer_id || '', agreed: req.query.agreed || '',
     };
     let quote = null;
     if (q.gross_kg && q.moisture && q.oil && q.foreign && q.damage) {
@@ -90,6 +90,8 @@ export default function mountOutsourcing(app) {
       costKinds: RUN_COST_KINDS,
       spotSchedule: out.currentSpotSchedule(summary.run.season_id),
       canApproveCosts: can(req.user, 'spot.approve'),
+      wards: wards(),
+      budgetLines: out.runBudgetLines(summary.run.id),
       q,
       quote,
       flash: req.query.err || null,
@@ -141,7 +143,7 @@ export default function mountOutsourcing(app) {
         gross_kg: req.body.gross_kg, tare_kg: req.body.tare_kg || '0',
         moisture: req.body.moisture, oil: req.body.oil,
         foreign: req.body.foreign, damage: req.body.damage,
-        supplier_id: req.body.supplier_id || '',
+        offer_id: req.body.offer_id || '',
         agreed: req.body.agreed || '',
       });
       if (tareG >= grossG) throw new Error('tare must be less than gross');
@@ -156,9 +158,13 @@ export default function mountOutsourcing(app) {
     try {
       const t = now();
       const agreed = String(req.body.agreed || '').trim();
+      const offerId = Number(req.body.offer_id);
+      const offer = offerId ? plan.getOffer(offerId) : null;
+      if (!offer) throw new Error('choose an accepted offer to buy against');
       const { code, grade, rejected } = out.createSpotPurchase({
         runId,
-        supplierId: Number(req.body.supplier_id),
+        offerId,
+        supplierId: offer.supplier_id,
         grossG: toGrams(req.body.gross_kg),
         tareG: toGrams(req.body.tare_kg || '0'),
         moistureBp: toBp(req.body.moisture),
@@ -359,6 +365,25 @@ export default function mountOutsourcing(app) {
   });
 
   // --- spot price schedule ------------------------------------------------
+  // Recording a farm from inside a run: you should never have to leave the run
+  // to make someone selectable in it.
+  r.post('/runs/:id/suppliers', requirePermission('spot.buy'), (req, res) => {
+    const runId = Number(req.params.id);
+    try {
+      const { code } = out.createSupplier({
+        name: String(req.body.name || '').trim(),
+        phone: String(req.body.phone || '').trim(),
+        area: String(req.body.area || '').trim(),
+        ward_id: req.body.ward_id ? Number(req.body.ward_id) : null,
+        mm_name: String(req.body.mm_name || req.body.name || '').trim(),
+        notes: req.body.notes || '',
+      }, req.user.id);
+      res.redirect(`/outsourcing/runs/${runId}?ok=${encodeURIComponent(`${code} added — now record their offer`)}#offers`);
+    } catch (err) {
+      res.redirect(`/outsourcing/runs/${runId}?err=${encodeURIComponent(err.message)}#offers`);
+    }
+  });
+
   r.post('/suppliers/:id', requirePermission('spot.buy'), (req, res) => {
     try {
       out.updateSupplier(Number(req.params.id), {

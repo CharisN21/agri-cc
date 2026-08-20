@@ -146,9 +146,22 @@ export function seedV2({ log = console.log } = {}) {
       }, users.field2);
 
       spec.loads.forEach(([grossG, tareG, moist, oil, fm, dmg, agreed], li) => {
+        // The flow the app now enforces: a farm offers, the officer accepts,
+        // and only then is the load weighed and bought.
+        const supplierId = supplierIds[(ri * 2 + li) % supplierIds.length];
+        const offer = plan.addOffer({
+          run_id: runId, supplier_id: supplierId,
+          offered_g: grossG - tareG,
+          asking_price_cents: agreed || 5200,
+          offered_on: spec.started, notes: '',
+          est_moisture_bp: moist, est_oil_bp: oil,
+        }, users.field2);
+        plan.decideOffer(offer.id, { status: 'Accepted' }, users.field2);
+
         const r = out.createSpotPurchase({
           runId,
-          supplierId: supplierIds[(ri * 2 + li) % supplierIds.length],
+          offerId: offer.id,
+          supplierId,
           grossG, tareG,
           moistureBp: moist, oilBp: oil, foreignBp: fm, damageBp: dmg,
           agreedPriceCents: agreed,
@@ -187,6 +200,8 @@ export function seedV2({ log = console.log } = {}) {
           out.addRunCost({ run_id: runId, kind, description, amount_cents: amount,
                            incurred_on: spec.started, is_projected: 1 }, users.owner);
         }
+        // Left open on purpose: these are the choices the comparison screen
+        // exists to weigh up. The cheapest per kilogram is NOT the best buy.
         const offers = [
           [0, 300_000, 5000],    // cheapest per kg, but a small load
           [1, 2_000_000, 5400],  // dearest per kg, but fills the vehicle

@@ -6,7 +6,7 @@
 // season everywhere.
 import { parseCookies } from './auth.js';
 import { resolveSeason, listSeasons, progressStrip } from './repo-admin.js';
-import { openRuns } from './repo-outsourcing.js';
+import { openRuns, navRuns } from './repo-outsourcing.js';
 
 export const UNITS = { kg: 'Kilograms', t: 'Tonnes' };
 
@@ -33,6 +33,9 @@ export function attachContext(req, res, next) {
   // An open supply run is unfinished work. It belongs in the sidebar on every
   // screen, not buried in a table you have to remember to go back to.
   res.locals.openRuns = season && req.user ? openRuns(season.id) : [];
+  // Open runs first, then recent closed ones, so a run is always one click away
+  // from anywhere rather than something you have to go hunting for.
+  res.locals.navRuns = season && req.user ? navRuns(season.id) : [];
 
   const cookieBits = [];
   if (req.query.season && season) cookieBits.push(`season=${season.id}`);

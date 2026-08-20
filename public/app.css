@@ -306,3 +306,50 @@ button.icon, .btn.icon {
   #nav-toggle { display: inline-block; }
   .content > main { padding: 1rem 0.8rem 3rem; }
 }
+
+/* ========================================================================
+   Stepped flow — a supply run is a sequence, not a page of loose forms
+   ======================================================================== */
+
+.steps {
+  display: flex; flex-wrap: wrap; gap: 0.35rem; list-style: none;
+  margin: 0 0 1.5rem; padding: 0.5rem; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  position: sticky; top: 52px; z-index: 9;
+}
+.steps li {
+  display: flex; align-items: center; gap: 0.4rem; flex: 1 1 auto;
+  padding: 0.35rem 0.7rem; border-radius: var(--radius);
+  font-size: 0.8rem; color: var(--text-dim); white-space: nowrap;
+}
+.steps li .n {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.35rem; height: 1.35rem; border-radius: 50%; flex: none;
+  background: var(--surface-2); border: 1px solid var(--border);
+  font-size: 0.72rem; font-weight: 700;
+}
+.steps li.done { color: var(--good); }
+.steps li.done .n { background: var(--good); border-color: var(--good); color: var(--bg); }
+.steps li.on { color: var(--text); background: var(--accent-soft); font-weight: 700; }
+.steps li.on .n { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+
+.step { scroll-margin-top: 110px; }
+.step + .step { margin-top: 2.25rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
+.step > h2 { display: flex; align-items: center; gap: 0.6rem; margin-top: 0; }
+.step-n {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.6rem; height: 1.6rem; border-radius: 50%; flex: none;
+  background: var(--accent); color: var(--bg); font-size: 0.8rem; font-weight: 700;
+}
+
+/* Runs listed under Outsourcing in the sidebar */
+.sidebar .runline { display: flex; align-items: baseline; gap: 0.35rem; }
+.sidebar .runline .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+.sidebar .runline .dot.open { background: var(--warn); }
+.sidebar .runline .dot.closed { background: var(--text-dim); opacity: 0.5; }
+.sidebar .runline .meta { font-size: 0.72rem; color: var(--text-dim); }
+
+@media (max-width: 640px) {
+  .steps { position: static; overflow-x: auto; flex-wrap: nowrap; }
+  .steps li { flex: 0 0 auto; }
+}
