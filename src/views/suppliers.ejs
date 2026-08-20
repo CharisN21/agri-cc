@@ -26,10 +26,16 @@
     <% suppliers.forEach(function (s) { %>
       <tr>
         <td class="code"><%= s.code %></td>
-        <td><%= s.name %></td>
-        <td class="mono small"><%= s.phone %></td>
-        <td class="small"><%= s.area %></td>
-        <td><%= s.ward_name || '—' %></td>
+        <td colspan="4" style="padding:0.3rem 0.6rem">
+          <form method="post" action="/outsourcing/suppliers/<%= s.id %>"
+                class="grid" style="grid-template-columns:1.3fr 1fr 1fr 0.9fr auto;gap:0.4rem">
+            <input name="name" value="<%= s.name %>" required aria-label="Name">
+            <input name="phone" value="<%= s.phone %>" aria-label="Phone" placeholder="phone">
+            <input name="mm_name" value="<%= s.mm_name %>" aria-label="Mobile money name" placeholder="mobile money name">
+            <input name="area" value="<%= s.area %>" aria-label="Area" placeholder="area">
+            <button type="submit" class="ghost">Save</button>
+          </form>
+        </td>
         <td class="num"><%= s.loads %></td>
         <td class="num"><%= weight(s.supplied_g, unit).value %></td>
         <td class="num"><%= money(s.paid_cents) %></td>

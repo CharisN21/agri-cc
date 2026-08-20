@@ -1,6 +1,7 @@
 import express from 'express';
 import { requireLogin, requirePermission } from '../auth.js';
 import * as repo from '../repo.js';
+import { regradeDelivery, regradeBlockedReason } from '../repo-corrections.js';
 import { toGrams, toBp } from '../domain/units.js';
 import { gradeReason } from '../domain/grading.js';
 import { now } from './index.js';
@@ -58,6 +59,7 @@ export default function mountDeliveries(app) {
         moistureBp: quality.moisture_bp, oilBp: quality.oil_bp, foreignBp: quality.foreign_bp,
       }) : null,
       preview,
+      regradeBlocked: quality ? regradeBlockedReason(delivery.id) : null,
       existingSettlement: repo.listSettlements({ seasonId: delivery.season_id })
         .find((s) => s.delivery_id === delivery.id) || null,
       flash: req.query.err || null,
@@ -81,6 +83,26 @@ export default function mountDeliveries(app) {
         notes: req.body.notes || '',
       }, req.user.id);
       res.redirect(`/deliveries/${req.params.id}?ok=${encodeURIComponent(`Graded ${grade}`)}`);
+    } catch (err) {
+      res.redirect(`/deliveries/${req.params.id}?err=${encodeURIComponent(err.message)}`);
+    }
+  });
+
+  r.post('/:id/regrade', requirePermission('delivery.grade'), (req, res) => {
+    try {
+      const t = now();
+      const { grade, previousGrade, discardedSettlement } = regradeDelivery({
+        deliveryId: Number(req.params.id),
+        moistureBp: toBp(req.body.moisture),
+        oilBp: toBp(req.body.oil),
+        foreignBp: toBp(req.body.foreign),
+        damageBp: toBp(req.body.damage),
+        testedOn: t.on, testedAt: t.at,
+        reason: req.body.reason,
+      }, req.user);
+      const parts = [`Re-graded ${previousGrade} to ${grade}`];
+      if (discardedSettlement) parts.push(`${discardedSettlement} discarded — recompute it`);
+      res.redirect(`/deliveries/${req.params.id}?ok=${encodeURIComponent(parts.join('; '))}`);
     } catch (err) {
       res.redirect(`/deliveries/${req.params.id}?err=${encodeURIComponent(err.message)}`);
     }

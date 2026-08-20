@@ -262,6 +262,22 @@ export default function mountOutsourcing(app) {
   });
 
   // --- spot price schedule ------------------------------------------------
+  r.post('/suppliers/:id', requirePermission('spot.buy'), (req, res) => {
+    try {
+      out.updateSupplier(Number(req.params.id), {
+        name: String(req.body.name || '').trim(),
+        phone: String(req.body.phone || '').trim(),
+        area: String(req.body.area || '').trim(),
+        ward_id: req.body.ward_id ? Number(req.body.ward_id) : null,
+        mm_name: String(req.body.mm_name || '').trim(),
+        notes: req.body.notes || '',
+      }, { at: now().at }, req.user.id);
+      res.redirect('/outsourcing/suppliers?ok=Supplier+updated');
+    } catch (err) {
+      res.redirect(`/outsourcing/suppliers?err=${encodeURIComponent(err.message)}`);
+    }
+  });
+
   r.post('/spot-price', requirePermission('spot.approve'), (req, res) => {
     try {
       out.addSpotScheduleVersion(req.season.id, {

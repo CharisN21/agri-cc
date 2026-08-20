@@ -6,6 +6,7 @@
 <p class="sub"><%= farmer.ward_name %> · <%= farmer.phone %> · registered <%= farmer.registered_on %></p>
 
 <% if (ok) { %><div class="flash ok"><%= ok %></div><% } %>
+<% if (typeof flash !== 'undefined' && flash) { %><div class="flash err"><%= flash %></div><% } %>
 <% if (mismatch) { %>
   <div class="flash err">
     Mobile money is registered as <strong><%= farmer.mm_name %></strong>, which does not match
@@ -87,6 +88,43 @@
     </tbody>
   </table>
 </div>
+
+<h2>Details</h2>
+<details class="card" <%= mismatch ? 'open' : '' %>>
+  <summary style="cursor:pointer;font-weight:600;font-size:0.9rem">
+    Edit this farmer
+    <span class="muted small">— a wrong phone or mobile-money name is what makes a payout bounce</span>
+  </summary>
+  <form method="post" action="/farmers/<%= farmer.id %>" class="grid" style="margin-top:0.8rem">
+    <div><label for="f_name">Full name (as on ID)</label>
+      <input id="f_name" name="full_name" value="<%= farmer.full_name %>" required></div>
+    <div><label for="f_id">National ID</label>
+      <input id="f_id" name="national_id" value="<%= farmer.national_id %>" required></div>
+    <div><label for="f_phone">Phone</label>
+      <input id="f_phone" name="phone" value="<%= farmer.phone %>" required></div>
+    <div><label for="f_mm">Mobile money name</label>
+      <input id="f_mm" name="mm_name" value="<%= farmer.mm_name %>"></div>
+    <div><label for="f_ward">Ward</label>
+      <select id="f_ward" name="ward_id">
+        <% wards.forEach(function (w) { %>
+          <option value="<%= w.id %>" <%= w.id === farmer.ward_id ? 'selected' : '' %>><%= w.name %></option>
+        <% }); %>
+      </select></div>
+    <div><label for="f_status">Status</label>
+      <select id="f_status" name="status">
+        <% ['Active','Inactive'].forEach(function (st) { %>
+          <option value="<%= st %>" <%= farmer.status === st ? 'selected' : '' %>><%= st %></option>
+        <% }); %>
+      </select></div>
+    <div style="grid-column:1/-1"><label for="f_notes">Notes</label>
+      <input id="f_notes" name="notes" value="<%= farmer.notes %>"></div>
+    <div class="actions"><button type="submit">Save changes</button></div>
+  </form>
+  <p class="small muted" style="margin-bottom:0">
+    Every change is written to the audit log, and changes to the phone or
+    mobile-money name are flagged there specifically.
+  </p>
+</details>
 
 <h2>Add a parcel</h2>
 <div class="card">

@@ -1,6 +1,7 @@
 import express from 'express';
 import { requireLogin, requirePermission } from '../auth.js';
 import * as repo from '../repo.js';
+import { updateFarmer } from '../repo-corrections.js';
 import { toGrams, toBp } from '../domain/units.js';
 import { now } from './index.js';
 
@@ -71,8 +72,28 @@ export default function mountFarmers(app) {
         .filter((d) => d.farmer_id === farmer.id),
       settlements: repo.listSettlements({ seasonId: season.id })
         .filter((s) => s.farmer_id === farmer.id),
+      wards: repo.wards(),
       ok: req.query.ok || null,
+      flash: req.query.err || null,
     });
+  });
+
+  r.post('/:id', requirePermission('farmer.edit'), (req, res) => {
+    try {
+      const { changed } = updateFarmer(Number(req.params.id), {
+        full_name: String(req.body.full_name || '').trim(),
+        national_id: String(req.body.national_id || '').trim(),
+        phone: String(req.body.phone || '').trim(),
+        mm_name: String(req.body.mm_name || '').trim(),
+        ward_id: Number(req.body.ward_id),
+        status: req.body.status,
+        notes: req.body.notes || '',
+      }, { at: now().at }, req.user.id);
+      const msg = changed.length ? `Updated ${changed.join(', ')}` : 'Nothing changed';
+      res.redirect(`/farmers/${req.params.id}?ok=${encodeURIComponent(msg)}`);
+    } catch (err) {
+      res.redirect(`/farmers/${req.params.id}?err=${encodeURIComponent(err.message)}`);
+    }
   });
 
   r.post('/:id/parcels', requirePermission('farmer.edit'), (req, res) => {

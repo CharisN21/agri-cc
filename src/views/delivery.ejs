@@ -53,6 +53,40 @@
     <p class="small muted" style="margin:0.2rem 0 0">
       Tested <%= quality.tested_on %> at <%= (quality.tested_at || '').slice(11, 16) %>
     </p>
+
+    <% if (regradeBlocked) { %>
+      <p class="small" style="margin:0.8rem 0 0; color:var(--bad)">
+        <strong>Cannot re-grade:</strong> <%= regradeBlocked %>.
+      </p>
+    <% } else { %>
+      <details style="margin-top:0.8rem">
+        <summary style="cursor:pointer;font-weight:600;font-size:0.85rem">
+          Re-grade this load
+          <span class="muted small">— for a reading typed wrong, while nothing is approved</span>
+        </summary>
+        <form method="post" action="/deliveries/<%= delivery.id %>/regrade" class="grid" style="margin-top:0.7rem">
+          <div><label for="rg_m">Moisture %</label>
+            <input id="rg_m" name="moisture" class="num" required value="<%= fromBp(quality.moisture_bp) %>"></div>
+          <div><label for="rg_o">Oil %</label>
+            <input id="rg_o" name="oil" class="num" required value="<%= fromBp(quality.oil_bp) %>"></div>
+          <div><label for="rg_f">Foreign %</label>
+            <input id="rg_f" name="foreign" class="num" required value="<%= fromBp(quality.foreign_bp) %>"></div>
+          <div><label for="rg_d">Damage %</label>
+            <input id="rg_d" name="damage" class="num" required value="<%= fromBp(quality.damage_bp) %>"></div>
+          <div style="grid-column:1/-1"><label for="rg_r">Why is it being re-graded</label>
+            <input id="rg_r" name="reason" required placeholder="e.g. moisture meter misread, sample retested"></div>
+          <div class="actions"><button type="submit">Re-grade</button></div>
+        </form>
+        <p class="small muted" style="margin-bottom:0">
+          <% if (existingSettlement) { %>
+            <strong><%= existingSettlement.code %> is still a draft and will be discarded</strong>
+            — recompute it from the corrected readings afterwards.
+          <% } else { %>
+            The grain is taken back out of the store and re-entered under the new grade.
+          <% } %>
+        </p>
+      </details>
+    <% } %>
   </div>
 <% } %>
 
