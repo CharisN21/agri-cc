@@ -353,3 +353,47 @@ button.icon, .btn.icon {
   .steps { position: static; overflow-x: auto; flex-wrap: nowrap; }
   .steps li { flex: 0 0 auto; }
 }
+
+/* ========================================================================
+   Touch sizing
+   ------------------------------------------------------------------------
+   The field officer is standing in a field holding a phone, often with one
+   hand on a weighbridge. 36px controls are a desktop habit; on a touch screen
+   they are a mis-tap. Anything you press gets at least 44px of height, which
+   is the smallest reliable target for a thumb.
+   ======================================================================== */
+@media (pointer: coarse), (max-width: 640px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea,
+  button,
+  .btn {
+    min-height: 44px;
+  }
+
+  /* Checkboxes cannot simply grow — the box itself would look wrong. Give the
+     label around them the height instead, so the whole row is tappable. */
+  label:has(> input[type="checkbox"]) {
+    display: flex; align-items: center; gap: 0.5rem; min-height: 44px;
+  }
+  input[type="checkbox"] { width: 20px; height: 20px; }
+
+  /* Summary rows are buttons in disguise: Void, Decline, Edit run details. */
+  summary { min-height: 44px; display: flex; align-items: center; }
+
+  /* Table action cells get room to breathe rather than stacking flush. */
+  td form + form, td form + details { margin-top: 0.4rem; }
+
+  /* One column per row on a phone: side-by-side fields at 375px are unusable.
+     !important is deliberate. The inline edit rows (a cost line, a supplier
+     row) set their column template as a style attribute so the desktop layout
+     can be tuned per table, and an inline style outranks a media query. This is
+     the one place where overriding it is correct: five columns in 375px is not
+     a layout, it is a pile. */
+  form.grid { grid-template-columns: 1fr !important; }
+  .split { grid-template-columns: 1fr !important; }
+
+  /* A child asking to span two columns creates a second track even when the
+     template says one. On a phone nothing spans: every field is its own row. */
+  form.grid > * { grid-column: auto !important; }
+}
