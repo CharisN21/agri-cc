@@ -22,6 +22,7 @@ export default function mountOutsourcing(app) {
       title: 'Outsourcing',
       runs: out.listRuns({ seasonId: req.season.id, status: req.query.status || null }),
       totals: out.outsourcingTotals(req.season.id),
+      openRuns: out.openRuns(req.season.id),
       spotSchedule: out.currentSpotSchedule(req.season.id),
       status: req.query.status || '',
       today: now().on,
@@ -168,6 +169,55 @@ export default function mountOutsourcing(app) {
       res.redirect(`/outsourcing/runs/${runId}?ok=${encodeURIComponent(msg)}`);
     } catch (err) {
       res.redirect(`/outsourcing/runs/${runId}?err=${encodeURIComponent(err.message)}`);
+    }
+  });
+
+  // --- corrections while the run is open ---------------------------------
+  r.post('/runs/:id/update', requirePermission('spot.buy'), (req, res) => {
+    try {
+      out.updateRun(Number(req.params.id), {
+        area: String(req.body.area || '').trim(),
+        vehicle_reg: String(req.body.vehicle_reg || '').trim(),
+        started_on: req.body.started_on,
+        notes: req.body.notes || '',
+      }, req.user.id);
+      res.redirect(`/outsourcing/runs/${req.params.id}?ok=Run+details+updated`);
+    } catch (err) {
+      res.redirect(`/outsourcing/runs/${req.params.id}?err=${encodeURIComponent(err.message)}`);
+    }
+  });
+
+  r.post('/costs/:id/update', requirePermission('spot.buy'), (req, res) => {
+    try {
+      const runId = out.updateRunCost(Number(req.params.id), {
+        kind: req.body.kind,
+        description: req.body.description || '',
+        amount_cents: toCents(req.body.amount),
+        incurred_on: req.body.incurred_on || undefined,
+      }, req.user.id);
+      res.redirect(`/outsourcing/runs/${runId}?ok=Cost+corrected`);
+    } catch (err) {
+      res.redirect(`/outsourcing/runs/${req.body.run_id || ''}?err=${encodeURIComponent(err.message)}`);
+    }
+  });
+
+  r.post('/costs/:id/delete', requirePermission('spot.buy'), (req, res) => {
+    try {
+      const runId = out.deleteRunCost(Number(req.params.id), req.user.id);
+      res.redirect(`/outsourcing/runs/${runId}?ok=Cost+removed`);
+    } catch (err) {
+      res.redirect(`/outsourcing/runs/${req.body.run_id || ''}?err=${encodeURIComponent(err.message)}`);
+    }
+  });
+
+  r.post('/purchases/:id/void', requirePermission('spot.buy'), (req, res) => {
+    try {
+      const runId = out.voidSpotPurchase(Number(req.params.id), {
+        reason: req.body.reason, voidedAt: now().at,
+      }, req.user);
+      res.redirect(`/outsourcing/runs/${runId}?ok=Load+voided+and+stock+reversed`);
+    } catch (err) {
+      res.redirect(`/outsourcing/runs/${req.body.run_id || ''}?err=${encodeURIComponent(err.message)}`);
     }
   });
 

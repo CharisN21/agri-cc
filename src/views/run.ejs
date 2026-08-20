@@ -69,6 +69,26 @@
   </div>
 <% } %>
 
+<% if (open) { %>
+  <details class="card" <%= (!run.area || !run.vehicle_reg) ? 'open' : '' %>>
+    <summary style="cursor:pointer;font-weight:600;font-size:0.9rem">
+      Edit run details
+      <span class="muted small">— area, vehicle, date and notes, while this run is open</span>
+    </summary>
+    <form method="post" action="/outsourcing/runs/<%= run.id %>/update" class="grid" style="margin-top:0.8rem">
+      <div><label for="e_area">Area</label>
+        <input id="e_area" name="area" value="<%= run.area %>" required></div>
+      <div><label for="e_veh">Vehicle</label>
+        <input id="e_veh" name="vehicle_reg" value="<%= run.vehicle_reg %>"></div>
+      <div><label for="e_date">Date</label>
+        <input id="e_date" name="started_on" type="date" value="<%= run.started_on %>"></div>
+      <div style="grid-column:1/-1"><label for="e_notes">Notes</label>
+        <input id="e_notes" name="notes" value="<%= run.notes %>"></div>
+      <div class="actions"><button type="submit">Save details</button></div>
+    </form>
+  </details>
+<% } %>
+
 <div class="split">
   <!-- ---------------------------------------------- what the trip cost -->
   <div class="card">
@@ -96,10 +116,29 @@
         <tbody>
         <% costs.forEach(function (x) { %>
           <tr>
-            <td class="small"><%= costKinds[x.kind] || x.kind %></td>
-            <td class="small muted"><%= x.description %></td>
-            <td class="small"><%= x.incurred_on %></td>
-            <td class="num"><%= money(x.amount_cents) %></td>
+            <% if (open) { %>
+              <td colspan="4" style="padding:0.3rem 0.6rem">
+                <form method="post" action="/outsourcing/costs/<%= x.id %>/update"
+                      class="grid" style="grid-template-columns:1.3fr 1.6fr 0.9fr auto auto;gap:0.4rem">
+                  <input type="hidden" name="run_id" value="<%= run.id %>">
+                  <select name="kind" aria-label="Cost kind">
+                    <% Object.keys(costKinds).forEach(function (k) { %>
+                      <option value="<%= k %>" <%= x.kind === k ? 'selected' : '' %>><%= costKinds[k] %></option>
+                    <% }); %>
+                  </select>
+                  <input name="description" value="<%= x.description %>" placeholder="description" aria-label="Description">
+                  <input name="amount" class="num" value="<%= fromCents(x.amount_cents) %>" aria-label="Amount">
+                  <button type="submit" class="ghost" title="Save this line">Save</button>
+                  <button type="submit" class="ghost" title="Remove this line"
+                          formaction="/outsourcing/costs/<%= x.id %>/delete">✕</button>
+                </form>
+              </td>
+            <% } else { %>
+              <td class="small"><%= costKinds[x.kind] || x.kind %></td>
+              <td class="small muted"><%= x.description %></td>
+              <td class="small"><%= x.incurred_on %></td>
+              <td class="num"><%= money(x.amount_cents) %></td>
+            <% } %>
           </tr>
         <% }); %>
         </tbody>
@@ -210,7 +249,7 @@
     <% } %>
     <% purchases.forEach(function (p, i) {
          var per = c.perLoad.find(function (x) { return x.id === p.id; }); %>
-      <tr>
+      <tr <%= p.voided_at ? 'style="opacity:0.45;text-decoration:line-through"' : '' %>>
         <td class="code"><%= p.code %></td>
         <td><%= p.supplier_name %></td>
         <td><span class="pill <%= p.grade %>"><%= p.grade %></span></td>
@@ -229,12 +268,26 @@
         <td><span class="pill <%= p.status %>"><%= p.status %></span></td>
         <td class="notes"><%= p.price_reason %></td>
         <td>
-          <% if (p.status === 'Unpaid') { %>
-            <form method="post" action="/outsourcing/purchases/<%= p.id %>/pay">
-              <input type="hidden" name="back" value="/outsourcing/runs/<%= run.id %>">
-              <input type="hidden" name="reference" value="<%= p.reference %>">
-              <button type="submit">Mark paid</button>
-            </form>
+          <% if (p.voided_at) { %>
+            <span class="pill bad">Voided</span>
+          <% } else { %>
+            <% if (p.status === 'Unpaid') { %>
+              <form method="post" action="/outsourcing/purchases/<%= p.id %>/pay" style="margin-bottom:0.3rem">
+                <input type="hidden" name="back" value="/outsourcing/runs/<%= run.id %>">
+                <input type="hidden" name="reference" value="<%= p.reference %>">
+                <button type="submit">Mark paid</button>
+              </form>
+            <% } %>
+            <% if (open && p.status !== 'Paid') { %>
+              <details>
+                <summary class="small muted" style="cursor:pointer">Void</summary>
+                <form method="post" action="/outsourcing/purchases/<%= p.id %>/void" style="margin-top:0.3rem">
+                  <input type="hidden" name="run_id" value="<%= run.id %>">
+                  <input name="reason" required placeholder="why?" style="min-width:9rem">
+                  <button type="submit" class="ghost">Confirm</button>
+                </form>
+              </details>
+            <% } %>
           <% } %>
         </td>
       </tr>

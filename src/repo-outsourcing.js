@@ -84,11 +84,11 @@ export function createSupplier(data, actorId) {
 export const listSuppliers = ({ q = '' } = {}) =>
   getDb().prepare(
     `SELECT s.*, l.name AS ward_name,
-            (SELECT COUNT(*) FROM spot_purchase sp WHERE sp.supplier_id = s.id) AS loads,
+            (SELECT COUNT(*) FROM spot_purchase sp WHERE sp.supplier_id = s.id AND sp.voided_at IS NULL) AS loads,
             (SELECT COALESCE(SUM(sp.payable_g), 0) FROM spot_purchase sp
-              WHERE sp.supplier_id = s.id) AS supplied_g,
+              WHERE sp.supplier_id = s.id AND sp.voided_at IS NULL) AS supplied_g,
             (SELECT COALESCE(SUM(sp.net_payable_cents), 0) FROM spot_purchase sp
-              WHERE sp.supplier_id = s.id) AS paid_cents
+              WHERE sp.supplier_id = s.id AND sp.voided_at IS NULL) AS paid_cents
        FROM supplier s
        LEFT JOIN location l ON l.id = s.ward_id
       WHERE (@q = '' OR s.name LIKE @like OR s.code LIKE @like OR s.phone LIKE @like)
@@ -143,9 +143,9 @@ export function reopenRun(runId, actorId) {
 export const listRuns = ({ seasonId, status = null } = {}) =>
   getDb().prepare(
     `SELECT r.*, u.full_name AS officer_name,
-            (SELECT COUNT(*) FROM spot_purchase sp WHERE sp.run_id = r.id) AS loads,
-            (SELECT COALESCE(SUM(sp.payable_g), 0) FROM spot_purchase sp WHERE sp.run_id = r.id) AS payable_g,
-            (SELECT COALESCE(SUM(sp.net_payable_cents), 0) FROM spot_purchase sp WHERE sp.run_id = r.id) AS purchase_cents,
+            (SELECT COUNT(*) FROM spot_purchase sp WHERE sp.run_id = r.id AND sp.voided_at IS NULL) AS loads,
+            (SELECT COALESCE(SUM(sp.payable_g), 0) FROM spot_purchase sp WHERE sp.run_id = r.id AND sp.voided_at IS NULL) AS payable_g,
+            (SELECT COALESCE(SUM(sp.net_payable_cents), 0) FROM spot_purchase sp WHERE sp.run_id = r.id AND sp.voided_at IS NULL) AS purchase_cents,
             (SELECT COALESCE(SUM(rc.amount_cents), 0) FROM run_cost rc WHERE rc.run_id = r.id) AS overhead_cents
        FROM supply_run r
        LEFT JOIN app_user u ON u.id = r.field_officer_id
@@ -188,14 +188,22 @@ export const runPurchases = (runId) =>
       WHERE sp.run_id = ? ORDER BY sp.id`,
   ).all(runId);
 
+/** Only the loads that still count — voided ones are excluded. */
+export const liveRunPurchases = (runId) =>
+  runPurchases(runId).filter((p) => p.voided_at === null);
+
 /** The full picture for one run: what we bought, what it cost, what it landed at. */
 export function runSummary(runId) {
   const run = getRun(runId);
   if (!run) return null;
   const purchases = runPurchases(runId);
+  const live = purchases.filter((p) => p.voided_at === null && p.status !== 'Rejected');
   const costs = runCosts(runId);
+  // Costing sees only the loads that still count. A rejected load was never
+  // bought and a voided one has been reversed — including either would spread
+  // the trip's cost across grain that is not in the store.
   const costing = runCosting(
-    purchases.map((p) => ({
+    live.map((p) => ({
       id: p.id, code: p.code, supplier_name: p.supplier_name,
       payableG: p.payable_g, netPayableCents: p.net_payable_cents,
     })),
@@ -345,6 +353,7 @@ export const listSpotPurchases = ({ seasonId, status = null } = {}) =>
        JOIN supply_run r ON r.id = sp.run_id
        LEFT JOIN quality_test q ON q.spot_purchase_id = sp.id
       WHERE sp.season_id = @season_id AND (@status IS NULL OR sp.status = @status)
+        AND sp.voided_at IS NULL
       ORDER BY sp.id DESC`,
   ).all({ season_id: seasonId, status });
 
@@ -357,7 +366,8 @@ export function outsourcingTotals(seasonId) {
             COALESCE(SUM(CASE WHEN status = 'Unpaid' THEN balance_cents ELSE 0 END), 0) AS unpaid_cents,
             COALESCE(SUM(CASE WHEN price_basis = 'negotiated' THEN 1 ELSE 0 END), 0) AS negotiated,
             COALESCE(SUM((agreed_price_cents - reference_price_cents) * payable_g / 1000), 0) AS variance_cents
-       FROM spot_purchase WHERE season_id = ? AND status <> 'Rejected'`,
+       FROM spot_purchase
+      WHERE season_id = ? AND status <> 'Rejected' AND voided_at IS NULL`,
   ).get(seasonId);
   const over = db.prepare(
     `SELECT COALESCE(SUM(rc.amount_cents), 0) AS overhead_cents
@@ -376,3 +386,135 @@ export function outsourcingTotals(seasonId) {
       ? Math.round((over.overhead_cents * 1_000_000) / buys.payable_g) : 0,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Corrections while a run is still open.
+//
+// A supply run is a draft until it is closed. Everything below refuses to touch
+// a closed run — and the triggers in 003 refuse it again underneath, so the
+// guarantee does not depend on these checks being remembered.
+
+function assertOpen(db, runId) {
+  const run = db.prepare('SELECT * FROM supply_run WHERE id = ?').get(runId);
+  if (!run) throw new Error('supply run not found');
+  if (run.status !== 'Open') {
+    throw new Error(`${run.code} is closed — reopen it before making changes`);
+  }
+  return run;
+}
+
+/** Correct the run header: where it went, what it drove, when, and any notes. */
+export function updateRun(runId, fields, actorId) {
+  return tx((db) => {
+    const run = assertOpen(db, runId);
+    db.prepare(
+      `UPDATE supply_run SET area = @area, vehicle_reg = @vehicle_reg,
+              started_on = @started_on, notes = @notes
+        WHERE id = @id`,
+    ).run({
+      id: runId,
+      area: fields.area ?? run.area,
+      vehicle_reg: fields.vehicle_reg ?? run.vehicle_reg,
+      started_on: fields.started_on || run.started_on,
+      notes: fields.notes ?? run.notes,
+    });
+    audit(actorId, 'run.update', 'supply_run', runId,
+          { code: run.code, from: { area: run.area, vehicle_reg: run.vehicle_reg } });
+    return true;
+  });
+}
+
+/** Correct a cost line — the mistyped 45,000 that should have been 4,500. */
+export function updateRunCost(costId, fields, actorId) {
+  return tx((db) => {
+    const cost = db.prepare('SELECT * FROM run_cost WHERE id = ?').get(costId);
+    if (!cost) throw new Error('cost not found');
+    assertOpen(db, cost.run_id);
+    db.prepare(
+      `UPDATE run_cost SET kind = @kind, description = @description,
+              amount_cents = @amount_cents, incurred_on = @incurred_on
+        WHERE id = @id`,
+    ).run({
+      id: costId,
+      kind: fields.kind || cost.kind,
+      description: fields.description ?? cost.description,
+      amount_cents: fields.amount_cents ?? cost.amount_cents,
+      incurred_on: fields.incurred_on || cost.incurred_on,
+    });
+    audit(actorId, 'run_cost.update', 'run_cost', costId,
+          { from: cost.amount_cents, to: fields.amount_cents });
+    return cost.run_id;
+  });
+}
+
+/** Remove a cost line that should never have been there. */
+export function deleteRunCost(costId, actorId) {
+  return tx((db) => {
+    const cost = db.prepare('SELECT * FROM run_cost WHERE id = ?').get(costId);
+    if (!cost) throw new Error('cost not found');
+    assertOpen(db, cost.run_id);
+    // Recorded before the row disappears, so the history survives the deletion.
+    audit(actorId, 'run_cost.delete', 'run_cost', costId,
+          { kind: cost.kind, amount_cents: cost.amount_cents, description: cost.description });
+    db.prepare('DELETE FROM run_cost WHERE id = ?').run(costId);
+    return cost.run_id;
+  });
+}
+
+/**
+ * Void a load bought in error.
+ *
+ * Never a delete: buying it moved grain into the store, so undoing it must move
+ * that grain back out. stock_movement is append-only, so the reversal is a new
+ * negative row, not the removal of the old one — the store's history shows the
+ * grain arriving and leaving, which is what actually happened.
+ *
+ * A load that has already been paid cannot simply be voided; the payment has to
+ * be reversed first, and the database enforces that.
+ */
+export function voidSpotPurchase(purchaseId, { reason, voidedAt }, actor) {
+  return tx((db) => {
+    const sp = db.prepare('SELECT * FROM spot_purchase WHERE id = ?').get(purchaseId);
+    if (!sp) throw new Error('load not found');
+    if (sp.voided_at) throw new Error(`${sp.code} is already voided`);
+    assertOpen(db, sp.run_id);
+    if (!String(reason || '').trim()) throw new Error('say why this load is being voided');
+    if (sp.status === 'Paid') {
+      throw new Error(
+        `${sp.code} has already been paid. Reverse the payment before voiding it.`);
+    }
+
+    // Put the grain back out of the store.
+    for (const mv of db.prepare(
+      "SELECT * FROM stock_movement WHERE ref_table = 'spot_purchase' AND ref_id = ?",
+    ).all(purchaseId)) {
+      db.prepare(
+        `INSERT INTO stock_movement (item_id, lot_id, location_id, qty_g, reason,
+                                     ref_table, ref_id, notes, created_by)
+         VALUES (?, ?, ?, ?, 'adjustment', 'spot_purchase', ?, ?, ?)`,
+      ).run(mv.item_id, mv.lot_id, mv.location_id, -mv.qty_g, purchaseId,
+            `Reversal of ${sp.code}: ${reason}`, actor.id ?? null);
+    }
+
+    db.prepare(
+      `UPDATE spot_purchase
+          SET voided_at = ?, voided_by = ?, void_reason = ?, balance_cents = 0
+        WHERE id = ?`,
+    ).run(voidedAt, actor.id ?? null, String(reason).trim(), purchaseId);
+
+    audit(actor.id, 'spot_purchase.void', 'spot_purchase', purchaseId,
+          { code: sp.code, reason, payable_g: sp.payable_g });
+    return sp.run_id;
+  });
+}
+
+/** Every run still open, for the sidebar and the resume banner. */
+export const openRuns = (seasonId) =>
+  getDb().prepare(
+    `SELECT r.id, r.code, r.area, r.started_on,
+            (SELECT COUNT(*) FROM spot_purchase sp
+              WHERE sp.run_id = r.id AND sp.voided_at IS NULL) AS loads
+       FROM supply_run r
+      WHERE r.season_id = ? AND r.status = 'Open'
+      ORDER BY r.started_on DESC, r.id DESC`,
+  ).all(seasonId);

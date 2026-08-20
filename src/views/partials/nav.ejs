@@ -52,4 +52,19 @@
       </ul>
     </details>
   <% }); %>
+
+  <% if (openRuns && openRuns.length) { %>
+    <details class="sec" open>
+      <summary>Open runs <span class="pill Pending" style="float:right;margin-top:-2px"><%= openRuns.length %></span></summary>
+      <ul>
+        <% openRuns.forEach(function (r) { %>
+          <li><a href="/outsourcing/runs/<%= r.id %>"
+                 class="<%= currentPath === '/outsourcing/runs/' + r.id ? 'on' : '' %>"
+                 title="<%= r.area %> — started <%= r.started_on %>">
+            <%= r.code %> <span class="muted small">· <%= r.loads %> load<%= r.loads === 1 ? '' : 's' %></span>
+          </a></li>
+        <% }); %>
+      </ul>
+    </details>
+  <% } %>
 </nav>
