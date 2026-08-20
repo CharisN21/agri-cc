@@ -146,7 +146,8 @@ export const listRuns = ({ seasonId, status = null } = {}) =>
             (SELECT COUNT(*) FROM spot_purchase sp WHERE sp.run_id = r.id AND sp.voided_at IS NULL) AS loads,
             (SELECT COALESCE(SUM(sp.payable_g), 0) FROM spot_purchase sp WHERE sp.run_id = r.id AND sp.voided_at IS NULL) AS payable_g,
             (SELECT COALESCE(SUM(sp.net_payable_cents), 0) FROM spot_purchase sp WHERE sp.run_id = r.id AND sp.voided_at IS NULL) AS purchase_cents,
-            (SELECT COALESCE(SUM(rc.amount_cents), 0) FROM run_cost rc WHERE rc.run_id = r.id) AS overhead_cents
+            (SELECT COALESCE(SUM(rc.amount_cents), 0) FROM run_cost rc
+              WHERE rc.run_id = r.id AND rc.is_projected = 0) AS overhead_cents
        FROM supply_run r
        LEFT JOIN app_user u ON u.id = r.field_officer_id
       WHERE r.season_id = @season_id AND (@status IS NULL OR r.status = @status)
@@ -166,17 +167,29 @@ export const getRun = (id) =>
 export function addRunCost(data, actorId) {
   return tx((db) => {
     const info = db.prepare(
-      `INSERT INTO run_cost (run_id, kind, description, amount_cents, incurred_on, created_by)
-       VALUES (@run_id, @kind, @description, @amount_cents, @incurred_on, @created_by)`,
-    ).run({ description: '', ...data, created_by: actorId ?? null });
+      `INSERT INTO run_cost (run_id, kind, description, amount_cents, incurred_on,
+                             is_projected, created_by)
+       VALUES (@run_id, @kind, @description, @amount_cents, @incurred_on,
+               @is_projected, @created_by)`,
+    ).run({ description: '', is_projected: 0, ...data, created_by: actorId ?? null });
     audit(actorId, 'run.cost', 'supply_run', data.run_id,
           { kind: data.kind, amountCents: data.amount_cents });
     return info.lastInsertRowid;
   });
 }
 
+// ACTUAL costs only. A projected line is a budget, not money spent, and feeding
+// it into the costing would double-count the whole trip.
 export const runCosts = (runId) =>
-  getDb().prepare('SELECT * FROM run_cost WHERE run_id = ? ORDER BY id').all(runId);
+  getDb().prepare(
+    'SELECT * FROM run_cost WHERE run_id = ? AND is_projected = 0 ORDER BY id',
+  ).all(runId);
+
+/** The budget set when the run was opened. */
+export const runBudgetLines = (runId) =>
+  getDb().prepare(
+    'SELECT * FROM run_cost WHERE run_id = ? AND is_projected = 1 ORDER BY id',
+  ).all(runId);
 
 export const runPurchases = (runId) =>
   getDb().prepare(
@@ -372,7 +385,7 @@ export function outsourcingTotals(seasonId) {
   const over = db.prepare(
     `SELECT COALESCE(SUM(rc.amount_cents), 0) AS overhead_cents
        FROM run_cost rc JOIN supply_run r ON r.id = rc.run_id
-      WHERE r.season_id = ?`,
+      WHERE r.season_id = ? AND rc.is_projected = 0`,
   ).get(seasonId);
 
   const landed = buys.purchase_cents + over.overhead_cents;

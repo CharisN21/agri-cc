@@ -89,6 +89,8 @@
   </details>
 <% } %>
 
+<%- include("partials/run-planning") %>
+
 <div class="split">
   <!-- ---------------------------------------------- what the trip cost -->
   <div class="card">
@@ -106,6 +108,9 @@
         <div><label for="amount">Amount (KES)</label>
           <input id="amount" name="amount" class="num" required placeholder="8000.00"></div>
         <div><label for="description">Description</label><input id="description" name="description"></div>
+        <div><label style="text-transform:none;letter-spacing:0">
+            <input type="checkbox" name="is_projected" style="width:auto"> Projected (budget)
+          </label></div>
         <div class="actions"><button type="submit">Add cost</button></div>
       </form>
     <% } %>

@@ -10,6 +10,7 @@
 import { getDb, tx } from './db.js';
 import * as admin from './repo-admin.js';
 import * as out from './repo-outsourcing.js';
+import * as plan from './repo-offers.js';
 
 const TODAY = '2026-08-18';
 
@@ -174,8 +175,55 @@ export function seedV2({ log = console.log } = {}) {
         }, users.field2);
       }
 
+      // The open run carries a target, a budget, and offers still to decide.
+      // They are chosen so the cheapest price per kilogram is NOT the best buy:
+      // that is the whole point of the comparison screen.
+      if (!spec.close) {
+        plan.setRunTarget(runId, 2_500_000, users.owner);
+        for (const [kind, description, amount] of [
+          ['transport', 'Projected pickup hire', 400_000],
+          ['labour', 'Projected loaders', 90_000],
+        ]) {
+          out.addRunCost({ run_id: runId, kind, description, amount_cents: amount,
+                           incurred_on: spec.started, is_projected: 1 }, users.owner);
+        }
+        const offers = [
+          [0, 300_000, 5000],    // cheapest per kg, but a small load
+          [1, 2_000_000, 5400],  // dearest per kg, but fills the vehicle
+          [3, 900_000, 5200],
+        ];
+        for (const [si, offeredG, price] of offers) {
+          plan.addOffer({
+            run_id: runId, supplier_id: supplierIds[si], offered_g: offeredG,
+            asking_price_cents: price, offered_on: spec.started,
+            notes: '', est_moisture_bp: null, est_oil_bp: null,
+          }, users.field2);
+        }
+        // A real overrun on the road, waiting on the owner.
+        plan.requestCostChange({
+          run_id: runId, direction: 'supplementary', kind: 'transport',
+          amount_cents: 180_000,
+          reason: 'Road washed out past Solai; had to hire a second vehicle for the last stretch',
+          requested_on: spec.started,
+        }, users.field2);
+      }
+
       if (spec.close) out.closeRun(runId, { endedOn: spec.close }, users.ops);
     });
+
+    // A saving declared on the first trip and approved: the pot other trips draw on.
+    const firstRun = db.prepare("SELECT id FROM supply_run WHERE code = 'RUN-0001'").get();
+    if (firstRun) {
+      const sv = plan.requestCostChange({
+        run_id: firstRun.id, direction: 'saving', kind: 'transport',
+        amount_cents: 120_000,
+        reason: 'Shared the pickup with a neighbouring trader, hire came in under budget',
+        requested_on: '2026-07-19',
+      }, users.field2);
+      plan.decideCostRequest(sv.id, {
+        status: 'Approved', note: 'Well done', decidedAt: '2026-07-20T09:00:00Z',
+      }, { id: users.owner });
+    }
 
     log(`  seeded ${supplierIds.length} suppliers, ${runs.length} supply runs, `
       + `${bought} spot loads (${rejected} rejected), ${leads.length} referrals`);

@@ -1,0 +1,253 @@
+<%# Target, budget, cost requests and the offer comparison for one supply run. %>
+<%# `open` is recomputed here rather than borrowed from run.ejs: EJS compiles
+    each include as its own template, so a var declared in the parent is not in
+    scope. Deriving it from run.status keeps the partial self-contained. %>
+<% var tp = planning.target; var bp = planning.budget; var rk = planning.ranking;
+   var open = run.status === 'Open'; %>
+
+<div class="card" id="target">
+  <div class="split" style="align-items:start">
+    <div>
+      <h3>Tonnage for this trip</h3>
+      <% if (tp.targetG > 0) { %>
+        <div class="working">
+          <div class="row"><span class="lbl">Target for this area</span>
+            <span class="val"><%= weight(tp.targetG, unit).value %> <%= weight(tp.targetG, unit).suffix %></span></div>
+          <div class="row"><span class="lbl">Bought so far</span>
+            <span class="val"><%= weight(tp.boughtG, unit).value %> <%= weight(tp.boughtG, unit).suffix %></span></div>
+          <div class="row"><span class="lbl">Still on the table as offers</span>
+            <span class="val"><%= weight(tp.offeredG, unit).value %> <%= weight(tp.offeredG, unit).suffix %></span></div>
+          <div class="row total"><span class="lbl"><%= tp.met ? 'Target met' : 'Still needed' %></span>
+            <span class="val"><%= weight(tp.remainingG, unit).value %> <%= weight(tp.remainingG, unit).suffix %></span></div>
+        </div>
+        <div class="bar <%= tp.achievedBp >= 10000 ? 'high' : tp.achievedBp >= 5000 ? 'mid' : 'low' %>">
+          <span style="width:<%= Math.min(100, tp.achievedBp / 100).toFixed(1) %>%"></span>
+        </div>
+        <p class="small muted" style="margin:0.4rem 0 0">
+          <%= fromBp(tp.achievedBp) %>% bought.
+          <% if (!tp.met) { %>
+            <% if (tp.shortfallAfterOffersG > 0) { %>
+              Even taking every offer on the table you would still be
+              <strong><%= weight(tp.shortfallAfterOffersG, unit).value %> <%= weight(tp.shortfallAfterOffersG, unit).suffix %></strong>
+              short — find more farms before closing.
+            <% } else { %>
+              The offers on the table are enough to close the gap.
+            <% } %>
+          <% } %>
+        </p>
+      <% } else { %>
+        <p class="empty" style="text-align:left">No tonnage target set for this trip.</p>
+      <% } %>
+      <% if (open) { %>
+        <form method="post" action="/outsourcing/runs/<%= run.id %>/target" class="grid" style="margin-top:0.6rem">
+          <div><label for="tg">Target (kg)</label>
+            <input id="tg" name="target_kg" class="num"
+                   value="<%= run.target_g ? fromGrams(run.target_g) : '' %>" placeholder="2000"></div>
+          <div class="actions"><button type="submit" class="ghost">Set target</button></div>
+        </form>
+      <% } %>
+    </div>
+
+    <div id="money">
+      <h3>Firm cost against budget</h3>
+      <% if (bp.projectedCents > 0 || bp.actualCents > 0) { %>
+        <div class="working">
+          <div class="row"><span class="lbl">Projected at the start</span>
+            <span class="val">KES <%= money(bp.projectedCents) %></span></div>
+          <% if (bp.approvedSupplementaryCents > 0) { %>
+            <div class="row"><span class="lbl">Supplementary approved</span>
+              <span class="val">KES <%= money(bp.approvedSupplementaryCents) %></span></div>
+          <% } %>
+          <div class="row"><span class="lbl">Actually spent</span>
+            <span class="val">KES <%= money(bp.actualCents) %></span></div>
+          <div class="row total">
+            <span class="lbl"><%= bp.state === 'over' ? 'Over budget by' : bp.state === 'under' ? 'Saved' : 'On budget' %></span>
+            <span class="val <%= bp.state === 'over' ? 'neg' : '' %>">KES <%= money(bp.state === 'over' ? bp.overBy : bp.savedBy) %></span>
+          </div>
+        </div>
+      <% } else { %>
+        <p class="empty" style="text-align:left">No budget set. Tick "projected" when adding a cost line to build one.</p>
+      <% } %>
+
+      <% if (savings.availableCents > 0) { %>
+        <p class="small muted" style="margin:0.5rem 0 0">
+          Savings pot this season: <strong>KES <%= money(savings.availableCents) %></strong> available
+          (<%= money(savings.declaredCents) %> declared, <%= money(savings.drawnCents) %> drawn).
+        </p>
+      <% } %>
+
+      <% if (open) { %>
+        <form method="post" action="/outsourcing/runs/<%= run.id %>/requests" class="grid" style="margin-top:0.6rem">
+          <div><label for="rq_dir">Ask or declare</label>
+            <select id="rq_dir" name="direction" required>
+              <option value="supplementary">Ask for more (unprojected cost)</option>
+              <option value="saving">Declare a saving</option>
+            </select></div>
+          <div><label for="rq_kind">Cost</label>
+            <select id="rq_kind" name="kind" required>
+              <% Object.keys(costKinds).forEach(function (k) { %>
+                <option value="<%= k %>"><%= costKinds[k] %></option>
+              <% }); %>
+            </select></div>
+          <div><label for="rq_amt">Amount (KES)</label>
+            <input id="rq_amt" name="amount" class="num" required placeholder="3500.00"></div>
+          <div style="grid-column:1/-1"><label for="rq_why">Why</label>
+            <input id="rq_why" name="reason" required placeholder="road washed out, had to hire a second vehicle"></div>
+          <div class="actions"><button type="submit">Send to the owner</button></div>
+        </form>
+        <p class="small muted" style="margin-bottom:0">
+          The owner decides, and you cannot approve your own request.
+        </p>
+      <% } %>
+
+      <% if (planning.requests.length) { %>
+        <div class="scroll">
+        <table style="margin-top:0.7rem">
+          <thead><tr><th>Ref</th><th></th><th class="num">Amount</th><th>Why</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+          <% planning.requests.forEach(function (q) { %>
+            <tr>
+              <td class="code"><%= q.code %></td>
+              <td class="small"><%= q.direction === 'saving' ? 'Saving' : 'Extra' %>
+                <span class="muted">· <%= costKinds[q.kind] || q.kind %></span></td>
+              <td class="num"><%= money(q.amount_cents) %></td>
+              <td class="notes"><%= q.reason %></td>
+              <td><span class="pill <%= q.status === 'Approved' ? 'Paid' : (q.status === 'Declined' ? 'bad' : 'Pending') %>"><%= q.status %></span>
+                <% if (q.decision_note) { %><div class="small muted"><%= q.decision_note %></div><% } %>
+              </td>
+              <td>
+                <% if (q.status === 'Requested' && canApproveCosts && q.requested_by !== user.id) { %>
+                  <form method="post" action="/outsourcing/requests/<%= q.id %>/decide">
+                    <input type="hidden" name="back" value="/outsourcing/runs/<%= run.id %>">
+                    <% if (q.direction === 'supplementary' && savings.availableCents >= q.amount_cents) { %>
+                      <label class="small muted" style="text-transform:none;letter-spacing:0">
+                        <input type="checkbox" name="from_savings" style="width:auto"> from savings
+                      </label>
+                    <% } %>
+                    <button type="submit" name="status" value="Approved">Approve</button>
+                    <button type="submit" class="ghost" name="status" value="Declined">Decline</button>
+                  </form>
+                <% } else if (q.status === 'Requested') { %>
+                  <span class="small muted">with the owner</span>
+                <% } %>
+              </td>
+            </tr>
+          <% }); %>
+          </tbody>
+        </table>
+        </div>
+      <% } %>
+    </div>
+  </div>
+</div>
+
+<h2 id="offers">Offers in this area</h2>
+<p class="sub">
+  The trip costs the same whoever you buy from, so the farm asking least per
+  kilogram is not always the cheapest buy — a small load carries the whole
+  vehicle on its own.
+</p>
+
+<% if (rk.cheapestIsNotBest) { %>
+  <div class="quote">
+    <strong><%= rk.cheapestPerKg.supplier_name %> is asking least per kilogram
+    (KES <%= money(rk.cheapestPerKg.askingPriceCents) %>)</strong> — but at
+    <%= weight(rk.cheapestPerKg.offeredG, unit).value %> <%= weight(rk.cheapestPerKg.offeredG, unit).suffix %>
+    that grain lands at <strong>KES <%= money(rk.cheapestPerKg.aloneLandedPerTonneCents) %> a tonne</strong>.
+    <br>
+    <%= rk.bestAlone.supplier_name %> asks more per kilogram
+    (KES <%= money(rk.bestAlone.askingPriceCents) %>), but
+    <%= weight(rk.bestAlone.offeredG, unit).value %> <%= weight(rk.bestAlone.offeredG, unit).suffix %>
+    lands at <strong>KES <%= money(rk.bestAlone.aloneLandedPerTonneCents) %> a tonne</strong>.
+    That is the better buy.
+  </div>
+<% } %>
+
+<div class="card scroll">
+  <table>
+    <thead><tr>
+      <th>Offer</th><th>Farm</th><th class="num">Quantity</th><th class="num">Asking / kg</th>
+      <th class="num">Grain cost</th><th class="num">Landed / t alone</th>
+      <th class="num">Landed / t with all above</th><th>Status</th><th></th>
+    </tr></thead>
+    <tbody>
+    <% if (planning.offers.length === 0) { %>
+      <tr><td colspan="9" class="empty">No offers recorded yet. Add what each farm is asking below.</td></tr>
+    <% } %>
+    <% planning.offers.forEach(function (ofr) {
+         var rr = rk.offers.find(function (x) { return x.id === ofr.id; }); %>
+      <tr <%= ofr.status === 'Declined' ? 'style="opacity:0.5"' : '' %>>
+        <td class="code"><%= ofr.code %></td>
+        <td><%= ofr.supplier_name %> <span class="muted small"><%= ofr.area %></span></td>
+        <td class="num"><%= weight(ofr.offered_g, unit).value %></td>
+        <td class="num"><%= money(ofr.asking_price_cents) %></td>
+        <td class="num"><%= rr ? money(rr.grainCents) : '—' %></td>
+        <td class="num <%= (rr && rk.bestAlone && rr.id === rk.bestAlone.id) ? 'badge-pos' : '' %>">
+          <%= rr ? money(rr.aloneLandedPerTonneCents) : '—' %>
+        </td>
+        <td class="num <%= (rr && rk.bestStop && rr.id === rk.bestStop.id) ? 'badge-pos' : '' %>">
+          <%= rr ? money(rr.cumulativeLandedPerTonneCents) : '—' %>
+          <% if (rr && rk.bestStop && rr.id === rk.bestStop.id) { %><div class="small muted">best stop</div><% } %>
+        </td>
+        <td>
+          <span class="pill <%= ofr.status === 'Accepted' ? 'Paid' : (ofr.status === 'Declined' ? 'bad' : 'Pending') %>"><%= ofr.status %></span>
+          <% if (ofr.decline_reason) { %><div class="small muted"><%= ofr.decline_reason %></div><% } %>
+        </td>
+        <td>
+          <% if (open && ofr.status === 'Open') { %>
+            <form method="post" action="/outsourcing/offers/<%= ofr.id %>/decide" style="margin-bottom:0.25rem">
+              <input type="hidden" name="run_id" value="<%= run.id %>">
+              <input type="hidden" name="status" value="Accepted">
+              <button type="submit" class="ghost">Accept</button>
+            </form>
+            <details>
+              <summary class="small muted" style="cursor:pointer">Decline</summary>
+              <form method="post" action="/outsourcing/offers/<%= ofr.id %>/decide" style="margin-top:0.25rem">
+                <input type="hidden" name="run_id" value="<%= run.id %>">
+                <input type="hidden" name="status" value="Declined">
+                <input name="reason" required placeholder="why?" style="min-width:8rem">
+                <button type="submit" class="ghost">Confirm</button>
+              </form>
+            </details>
+          <% } %>
+        </td>
+      </tr>
+    <% }); %>
+    </tbody>
+  </table>
+  <p class="small muted" style="margin:0.6rem 0 0">
+    "Landed / t alone" charges the whole trip to that one offer.
+    "With all above" assumes you also take every cheaper offer — which is how
+    filling the vehicle brings the cost down.
+    <% if (rk.alreadyBoughtG > 0) { %>
+      Both already count the
+      <%= weight(rk.alreadyBoughtG, unit).value %> <%= weight(rk.alreadyBoughtG, unit).suffix %> on board.
+    <% } %>
+  </p>
+</div>
+
+<% if (open) { %>
+  <div class="card">
+    <h3>Record an offer</h3>
+    <form method="post" action="/outsourcing/runs/<%= run.id %>/offers" class="grid">
+      <div style="grid-column:span 2"><label for="of_sup">Farm</label>
+        <select id="of_sup" name="supplier_id" required>
+          <% suppliers.forEach(function (sp) { %>
+            <option value="<%= sp.id %>"><%= sp.code %> — <%= sp.name %><%= sp.area ? ' (' + sp.area + ')' : '' %></option>
+          <% }); %>
+        </select></div>
+      <div><label for="of_qty">Quantity (kg)</label>
+        <input id="of_qty" name="offered_kg" class="num" required placeholder="800"></div>
+      <div><label for="of_price">Asking (KES/kg)</label>
+        <input id="of_price" name="asking_price" class="num" required placeholder="52.00"></div>
+      <div><label for="of_m">Est. moisture %</label><input id="of_m" name="est_moisture" class="num" placeholder="optional"></div>
+      <div><label for="of_o">Est. oil %</label><input id="of_o" name="est_oil" class="num" placeholder="optional"></div>
+      <div style="grid-column:1/-1"><label for="of_n">Notes</label><input id="of_n" name="notes"></div>
+      <div class="actions"><button type="submit">Add offer</button></div>
+    </form>
+    <p class="small muted" style="margin-bottom:0">
+      The farm must be on file as a supplier first.
+      <a href="/outsourcing/suppliers">Add one</a> if they are not.
+    </p>
+  </div>
+<% } %>

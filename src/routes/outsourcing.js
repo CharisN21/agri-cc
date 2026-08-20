@@ -5,11 +5,12 @@
 // app tells you what that grain really landed at — and whether it beat buying
 // from your contracted farmers.
 import express from 'express';
-import { requireLogin, requirePermission } from '../auth.js';
+import { requireLogin, requirePermission, can } from '../auth.js';
 import * as out from '../repo-outsourcing.js';
 import { wards } from '../repo.js';
 import { toGrams, toBp, toCents } from '../domain/units.js';
 import { RUN_COST_KINDS } from '../domain/outsourcing.js';
+import * as plan from '../repo-offers.js';
 import { now } from './index.js';
 
 export default function mountOutsourcing(app) {
@@ -23,6 +24,8 @@ export default function mountOutsourcing(app) {
       runs: out.listRuns({ seasonId: req.season.id, status: req.query.status || null }),
       totals: out.outsourcingTotals(req.season.id),
       openRuns: out.openRuns(req.season.id),
+      pendingRequests: plan.pendingCostRequests(req.season.id),
+      savings: plan.savingsPool(req.season.id),
       spotSchedule: out.currentSpotSchedule(req.season.id),
       status: req.query.status || '',
       today: now().on,
@@ -76,12 +79,17 @@ export default function mountOutsourcing(app) {
       } catch { quote = null; }
     }
 
+    const boughtG = summary.costing.payableG;
     res.render('run', {
       title: summary.run.code,
       ...summary,
+      planning: plan.runPlanning(summary.run, boughtG, summary.costing.overheadCents,
+                                summary.costing.purchaseCents),
+      savings: plan.savingsPool(summary.run.season_id),
       suppliers: out.listSuppliers(),
       costKinds: RUN_COST_KINDS,
       spotSchedule: out.currentSpotSchedule(summary.run.season_id),
+      canApproveCosts: can(req.user, 'spot.approve'),
       q,
       quote,
       flash: req.query.err || null,
@@ -112,8 +120,10 @@ export default function mountOutsourcing(app) {
         description: req.body.description || '',
         amount_cents: toCents(req.body.amount),
         incurred_on: req.body.incurred_on || now().on,
+        is_projected: req.body.is_projected === 'on' ? 1 : 0,
       }, req.user.id);
-      res.redirect(`/outsourcing/runs/${req.params.id}?ok=Cost+recorded`);
+      const what = req.body.is_projected === 'on' ? 'Budget line added' : 'Cost recorded';
+      res.redirect(`/outsourcing/runs/${req.params.id}?ok=${encodeURIComponent(what)}`);
     } catch (err) {
       res.redirect(`/outsourcing/runs/${req.params.id}?err=${encodeURIComponent(err.message)}`);
     }
@@ -218,6 +228,93 @@ export default function mountOutsourcing(app) {
       res.redirect(`/outsourcing/runs/${runId}?ok=Load+voided+and+stock+reversed`);
     } catch (err) {
       res.redirect(`/outsourcing/runs/${req.body.run_id || ''}?err=${encodeURIComponent(err.message)}`);
+    }
+  });
+
+  // --- offers -------------------------------------------------------------
+  r.post('/runs/:id/offers', requirePermission('spot.buy'), (req, res) => {
+    const runId = Number(req.params.id);
+    try {
+      plan.addOffer({
+        run_id: runId,
+        supplier_id: Number(req.body.supplier_id),
+        offered_g: toGrams(req.body.offered_kg),
+        asking_price_cents: toCents(req.body.asking_price),
+        est_moisture_bp: req.body.est_moisture ? toBp(req.body.est_moisture) : null,
+        est_oil_bp: req.body.est_oil ? toBp(req.body.est_oil) : null,
+        notes: req.body.notes || '',
+        offered_on: now().on,
+      }, req.user.id);
+      res.redirect(`/outsourcing/runs/${runId}?ok=Offer+recorded#offers`);
+    } catch (err) {
+      res.redirect(`/outsourcing/runs/${runId}?err=${encodeURIComponent(err.message)}`);
+    }
+  });
+
+  r.post('/offers/:id/decide', requirePermission('spot.buy'), (req, res) => {
+    try {
+      const runId = plan.decideOffer(Number(req.params.id), {
+        status: req.body.status, reason: req.body.reason || '',
+      }, req.user.id);
+      res.redirect(`/outsourcing/runs/${runId}?ok=Offer+${req.body.status.toLowerCase()}#offers`);
+    } catch (err) {
+      res.redirect(`/outsourcing/runs/${req.body.run_id || ''}?err=${encodeURIComponent(err.message)}`);
+    }
+  });
+
+  r.post('/offers/:id/update', requirePermission('spot.buy'), (req, res) => {
+    try {
+      const runId = plan.updateOffer(Number(req.params.id), {
+        offered_g: toGrams(req.body.offered_kg),
+        asking_price_cents: toCents(req.body.asking_price),
+      }, req.user.id);
+      res.redirect(`/outsourcing/runs/${runId}?ok=Offer+updated#offers`);
+    } catch (err) {
+      res.redirect(`/outsourcing/runs/${req.body.run_id || ''}?err=${encodeURIComponent(err.message)}`);
+    }
+  });
+
+  // --- target and budget ---------------------------------------------------
+  r.post('/runs/:id/target', requirePermission('spot.buy'), (req, res) => {
+    const runId = Number(req.params.id);
+    try {
+      plan.setRunTarget(runId, toGrams(req.body.target_kg || '0'), req.user.id);
+      res.redirect(`/outsourcing/runs/${runId}?ok=Target+set`);
+    } catch (err) {
+      res.redirect(`/outsourcing/runs/${runId}?err=${encodeURIComponent(err.message)}`);
+    }
+  });
+
+  // --- supplementary costs and declared savings ---------------------------
+  r.post('/runs/:id/requests', requirePermission('spot.buy'), (req, res) => {
+    const runId = Number(req.params.id);
+    try {
+      const { code } = plan.requestCostChange({
+        run_id: runId,
+        direction: req.body.direction,
+        kind: req.body.kind,
+        amount_cents: toCents(req.body.amount),
+        reason: req.body.reason,
+        requested_on: now().on,
+      }, req.user.id);
+      const what = req.body.direction === 'saving' ? 'Saving declared' : 'Supplementary requested';
+      res.redirect(`/outsourcing/runs/${runId}?ok=${encodeURIComponent(`${what} as ${code}`)}#money`);
+    } catch (err) {
+      res.redirect(`/outsourcing/runs/${runId}?err=${encodeURIComponent(err.message)}`);
+    }
+  });
+
+  r.post('/requests/:id/decide', requirePermission('spot.approve'), (req, res) => {
+    try {
+      const runId = plan.decideCostRequest(Number(req.params.id), {
+        status: req.body.status,
+        note: req.body.note || '',
+        decidedAt: now().at,
+        fromSavings: req.body.from_savings === 'on',
+      }, req.user);
+      res.redirect(`${req.body.back || `/outsourcing/runs/${runId}`}?ok=Request+${req.body.status.toLowerCase()}#money`);
+    } catch (err) {
+      res.redirect(`${req.body.back || '/outsourcing'}?err=${encodeURIComponent(err.message)}`);
     }
   });
 
